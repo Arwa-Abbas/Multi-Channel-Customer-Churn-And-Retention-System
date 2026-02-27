@@ -1,0 +1,199 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background-color: #0a0a0a;
+  color: white;
+}
+
+.dashboard {
+  min-height: 100vh;
+  padding: 24px;
+  background-color: #0a0a0a;
+}
+
+.dashboard h1 {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 24px;
+  color: white;
+}
+
+/* KPI Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.kpi-card {
+  background-color: #111111;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.kpi-label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.kpi-value {
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.kpi-value.white { color: white; }
+.kpi-value.red { color: #ef4444; }
+.kpi-value.green { color: #10b981; }
+.kpi-value.amber { color: #f59e0b; }
+
+/* Charts Row */
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.chart-card {
+  background-color: #111111;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.chart-card h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: white;
+}
+
+.chart-container {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+/* Feature Importance */
+.feature-card {
+  background-color: #111111;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 32px;
+}
+
+.feature-card h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: white;
+}
+
+.feature-container {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+/* Table */
+.table-card {
+  background-color: #111111;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.table-card h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: white;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th {
+  text-align: left;
+  padding: 12px 8px;
+  color: #666;
+  font-weight: 500;
+  border-bottom: 1px solid #222;
+}
+
+td {
+  padding: 12px 8px;
+  border-bottom: 1px solid rgba(34, 34, 34, 0.5);
+}
+
+tr:hover {
+  background-color: rgba(34, 34, 34, 0.4);
+}
+
+.customer-id {
+  font-family: monospace;
+  color: #ccc;
+}
+
+.segment-champions { color: #22d3a5; }
+.segment-loyal { color: #6c63ff; }
+.segment-atrisk { color: #f87171; }
+.segment-hibernating { color: #f59e0b; }
+.segment-lost { color: #94a3b8; }
+.segment-potential { color: #60a5fa; }
+
+.churn-prob {
+  color: #ef4444;
+  font-weight: 500;
+  text-align: right;
+}
+
+.clv-value {
+  color: #10b981;
+  font-weight: 500;
+  text-align: right;
+}
+
+.survival-days {
+  color: #999;
+  text-align: right;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.loading, .no-data {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.table-footer {
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+  margin-top: 16px;
+}
