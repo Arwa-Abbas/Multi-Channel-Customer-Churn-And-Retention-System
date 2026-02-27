@@ -1,38 +1,176 @@
-version: "3.9"
+# ============================================================
+# Churn & Retention System — Full Docker Compose Stack
+# Services: postgres, fastapi, react, airflow (scheduler +
+#           webserver + worker), mlflow, redis
+# ============================================================
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.1
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
+    # Pass our app env vars so DAGs can connect to churndb
+    DATABASE_URL: postgresql://churnapp:password123@postgres:5432/churndb
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    PYTHONPATH: /opt/airflow/backend
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./backend:/opt/airflow/backend          # DAGs import backend modules
+    - airflow_logs:/opt/airflow/logs
+    - airflow_plugins:/opt/airflow/plugins
+    - model_artifacts:/opt/airflow/backend/models/artifacts
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 
 services:
-  db:
-    image: postgres:16
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: churn_postgres
     environment:
-      POSTGRES_USER: churnapp
-      POSTGRES_PASSWORD: churnarwa1234
-      POSTGRES_DB: churndb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations/init.sh:/docker-entrypoint-initdb.d/init.sh
     ports:
       - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
 
-  backend:
-    build: ./backend
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - ./backend:/app
+  # ── Redis (Airflow Celery broker) ──────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: churn_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ── FastAPI Backend ────────────────────────────────────────
+  fastapi:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: churn_api
     environment:
-      - DATABASE_URL=postgresql://churnapp:churnarwa1234@db:5432/churndb
+      DATABASE_URL: postgresql://churnapp:password123@postgres:5432/churndb
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+    volumes:
+      - model_artifacts:/app/models/artifacts
+      - ./data:/app/data
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      retries: 3
+    restart: unless-stopped
 
+  # ── React Frontend ─────────────────────────────────────────
   frontend:
-    build: ./frontend
-    command: npm run dev
-    volumes:
-      - ./frontend:/app
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: churn_frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
     ports:
-      - "5173:5173"
+      - "3000:80"
     depends_on:
-      - backend
+      - fastapi
+    restart: unless-stopped
+
+  # ── MLflow Tracking Server ─────────────────────────────────
+  mlflow:
+    build:
+      context: ./mlflow
+      dockerfile: Dockerfile
+    container_name: churn_mlflow
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # ── Airflow Webserver ──────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: churn_airflow_web
+    command: webserver
+    ports:
+      - "8081:8080"  # Changed from 8080 to 8081 to avoid Oracle conflict
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Airflow Scheduler ──────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: churn_airflow_scheduler
+    command: scheduler
+    restart: unless-stopped
+
+  # ── Airflow Worker ─────────────────────────────────────────
+  airflow-worker:
+    <<: *airflow-common
+    container_name: churn_airflow_worker
+    command: celery worker
+    restart: unless-stopped
+
+  # ── Airflow Init (run once) ────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    container_name: churn_airflow_init
+    command: >
+      bash -c "
+        airflow db upgrade &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com
+      "
+    restart: "no"
 
 volumes:
-  db_data:
+  postgres_data:
+  airflow_logs:
+  airflow_plugins:
+  model_artifacts:
+  mlflow_artifacts:
