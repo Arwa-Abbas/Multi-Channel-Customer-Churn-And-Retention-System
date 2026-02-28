@@ -21,8 +21,8 @@ def get_customer(external_id: str):
             ROUND(p.clv_estimate::numeric, 2)           AS clv_estimate,
             ROUND(p.xgb_churn_prob * 100, 1)            AS xgb_churn_prob_pct
         FROM customers c
-        JOIN customer_features cf USING (customer_id)
-        JOIN predictions p USING (customer_id)
+        JOIN customer_features cf ON c.customer_id::text = cf.customer_id::text
+        JOIN predictions p ON c.customer_id::text = p.customer_id::text
         WHERE c.external_id = :eid
     """,
         {"eid": external_id},
@@ -39,7 +39,7 @@ def get_customer(external_id: str):
         """
         SELECT t.transaction_date::DATE::TEXT AS date, t.amount, t.product_category, t.channel
         FROM transactions t
-        JOIN customers c USING (customer_id)
+        JOIN customers c ON t.customer_id::text = c.customer_id::text
         WHERE c.external_id = :eid
         ORDER BY t.transaction_date DESC
         LIMIT 10
@@ -75,8 +75,8 @@ def search_customers(
                ROUND(p.churn_prob_30d * 100, 1) AS churn_prob_30d_pct,
                ROUND(p.clv_estimate::numeric, 2) AS clv_estimate
         FROM customers c
-        JOIN customer_features cf USING (customer_id)
-        JOIN predictions p USING (customer_id)
+        JOIN customer_features cf ON c.customer_id::text = cf.customer_id::text
+        JOIN predictions p ON c.customer_id::text = p.customer_id::text
         {where}
         ORDER BY p.churn_prob_30d DESC
         LIMIT :limit

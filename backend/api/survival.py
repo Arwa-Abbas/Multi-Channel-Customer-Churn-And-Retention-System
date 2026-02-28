@@ -89,7 +89,7 @@ def get_survival_summary():
             ROUND(AVG(p.churn_prob_30d) * 100, 1)       AS avg_churn_prob_30d_pct,
             ROUND(AVG(p.clv_estimate)::numeric, 2)       AS avg_clv
         FROM customer_features cf
-        JOIN predictions p USING (customer_id)
+        JOIN predictions p ON cf.customer_id::text = p.customer_id::text
         GROUP BY cf.rfm_tier
         ORDER BY avg_churn_prob_30d_pct DESC
     """
