@@ -702,3 +702,4 @@ html, body, #root {
   .nav-item { justify-content: center; padding: 10px; }
   .chart-grid-2, .chart-grid-3, .metric-row { grid-template-columns: 1fr; }
 }
+

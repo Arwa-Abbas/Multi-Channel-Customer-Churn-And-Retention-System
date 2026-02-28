@@ -48,11 +48,11 @@ def get_at_risk(
             cf.recency_days,
             cf.frequency,
             ROUND(cf.monetary::numeric, 2)        AS total_spend,
-            ROUND(p.churn_prob_30d, 3)             AS churn_prob_30d,
-            ROUND(p.churn_prob_90d, 3)             AS churn_prob_90d,
+            ROUND(p.churn_prob_30d * 100, 1)       AS churn_prob_30d_pct,
+            ROUND(p.churn_prob_90d * 100, 1)       AS churn_prob_90d_pct,
             p.median_survival_days,
             ROUND(p.clv_estimate::numeric, 2)      AS clv_estimate,
-            ROUND(p.xgb_churn_prob, 3)              AS xgb_churn_prob,
+            ROUND(p.xgb_churn_prob * 100, 1)        AS xgb_churn_prob_pct,
             p.scored_at
         FROM predictions p
         JOIN customer_features cf ON p.customer_id::text = cf.customer_id::text
