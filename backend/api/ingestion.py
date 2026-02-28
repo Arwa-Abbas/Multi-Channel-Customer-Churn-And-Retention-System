@@ -6,7 +6,6 @@ router = APIRouter()
 
 @router.get("/ingestion-log")
 def get_ingestion_log(limit: int = 30):
-    """Last N ingestion run entries for observability."""
     df = query_df(
         """
         SELECT source, run_date::TEXT, rows_loaded, null_rate,
@@ -23,24 +22,44 @@ def get_ingestion_log(limit: int = 30):
 
 @router.post("/pipeline/trigger")
 async def trigger_pipeline(background_tasks: BackgroundTasks):
-    """
-    Manually trigger the full pipeline (for dev/demo).
-    Runs in background — returns immediately.
-    In production, use Airflow to trigger instead.
-    """
+    """Manually trigger the full pipeline. Runs in background."""
 
     def run_all():
-        from pipelines.ingest_tickets import run_ticket_ingestion
-        from pipelines.rfm_pipeline import run_rfm_pipeline
-        from models.survival_model import train_cox_model, score_all_customers
-        from models.xgb_model import train_xgb_model, score_all_customers_xgb
+        import traceback, logging
 
-        run_ticket_ingestion(source="csv")
-        run_rfm_pipeline()
-        cph, df, run_id = train_cox_model()
-        score_all_customers(cph, df, run_id)
-        model, _ = train_xgb_model()
-        score_all_customers_xgb(model)
+        logger = logging.getLogger("pipeline")
+        try:
+            logger.info("[Pipeline] Starting ingestion...")
+            from pipelines.ingest_tickets import run_ticket_ingestion
+
+            run_ticket_ingestion(source="csv")
+
+            logger.info("[Pipeline] Running RFM...")
+            from pipelines.rfm_pipeline import run_rfm_pipeline
+
+            run_rfm_pipeline()
+
+            logger.info("[Pipeline] Training Cox PH...")
+            from models.survival_model import train_cox_model, score_all_customers
+
+            # Fixed: train_cox_model now returns 4 values (cph, df, features, run_id)
+            result = train_cox_model()
+            if len(result) == 4:
+                cph, df, features, run_id = result
+                score_all_customers(cph, df, features, run_id)
+            else:
+                cph, df, run_id = result
+                score_all_customers(cph, df, [], run_id)
+
+            logger.info("[Pipeline] Training XGBoost...")
+            from models.xgb_model import train_xgb_model, score_all_customers_xgb
+
+            model, _ = train_xgb_model()
+            score_all_customers_xgb(model)
+
+            logger.info("[Pipeline] Complete!")
+        except Exception:
+            logger.error(f"[Pipeline] ERROR:\n{traceback.format_exc()}")
 
     background_tasks.add_task(run_all)
     return {
