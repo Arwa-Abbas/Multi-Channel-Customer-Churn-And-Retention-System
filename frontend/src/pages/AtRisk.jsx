@@ -12,22 +12,29 @@ const TIER_COLORS = {
   'At Risk':             '#e05555',
   'Hibernating':         '#5b9bd5',
   'Lost':                '#9b7fe8',
+  "Can't Lose Them":     '#e878a2',
 }
 
+// API fields from api/segments.py get_at_risk():
+//   churn_prob_30d_pct  — already ×100 (e.g. 72.4)
+//   churn_prob_90d_pct  — already ×100
+//   xgb_churn_prob_pct  — already ×100
+//   clv_estimate, median_survival_days, external_id, rfm_tier, recency_days, frequency, total_spend
+
 export default function AtRisk() {
-  const [search,  setSearch]  = useState('')
-  const [tier,    setTier]    = useState('')
-  const [minProb, setMinProb] = useState(40)
-  const [sortCol, setSortCol] = useState('churn_prob_30d')
-  const [sortDir, setSortDir] = useState('desc')
+  const [search,   setSearch]   = useState('')
+  const [tier,     setTier]     = useState('')
+  const [minProb,  setMinProb]  = useState(40)
+  const [sortCol,  setSortCol]  = useState('churn_prob_30d_pct')
+  const [sortDir,  setSortDir]  = useState('desc')
   const [selected, setSelected] = useState(null)
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['atrisk', tier, minProb],
     queryFn: () => fetchAtRisk({
-      tier: tier || undefined,
-      min_prob: minProb / 100,
-      limit: 200,
+      tier:     tier || undefined,
+      min_prob: minProb / 100,   // API filter expects 0-1 (e.g. 0.40)
+      limit:    200,
     }),
   })
 
@@ -37,7 +44,7 @@ export default function AtRisk() {
   }
 
   const filtered = rows
-    .filter(r => !search || String(r.external_id || r.customer_id || '').toLowerCase().includes(search.toLowerCase()))
+    .filter(r => !search || String(r.external_id || '').toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       const v = (x) => Number(x[sortCol] ?? 0)
       return sortDir === 'asc' ? v(a) - v(b) : v(b) - v(a)
@@ -47,8 +54,8 @@ export default function AtRisk() {
     ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
     : null
 
-  const probClass = (p) => {
-    const pct = Number(p) * 100
+  // pct is already 0-100
+  const probClass = (pct) => {
     if (pct >= 70) return 'high'
     if (pct >= 40) return 'medium'
     return 'low'
@@ -58,16 +65,16 @@ export default function AtRisk() {
 
   return (
     <>
-      {/* Summary */}
+      {/* Summary cards — compare _pct directly against 70/40 thresholds */}
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
         <div className="kpi-card red">
           <div className="kpi-label"><AlertTriangle size={12} /> High Risk</div>
-          <div className="kpi-value">{rows.filter(r => Number(r.churn_prob_30d) >= 0.7).length}</div>
+          <div className="kpi-value">{rows.filter(r => Number(r.churn_prob_30d_pct) >= 70).length}</div>
           <div className="kpi-sub">&gt;70% churn prob</div>
         </div>
         <div className="kpi-card amber">
           <div className="kpi-label"><Filter size={12} /> Medium Risk</div>
-          <div className="kpi-value">{rows.filter(r => Number(r.churn_prob_30d) >= 0.4 && Number(r.churn_prob_30d) < 0.7).length}</div>
+          <div className="kpi-value">{rows.filter(r => Number(r.churn_prob_30d_pct) >= 40 && Number(r.churn_prob_30d_pct) < 70).length}</div>
           <div className="kpi-sub">40–70% churn prob</div>
         </div>
         <div className="kpi-card orange">
@@ -108,10 +115,7 @@ export default function AtRisk() {
         {isLoading ? (
           <div className="loading-spinner"><div className="spinner" /> Loading customers...</div>
         ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <AlertTriangle size={40} />
-            <p>No customers match your filters</p>
-          </div>
+          <div className="empty-state"><AlertTriangle size={40} /><p>No customers match your filters</p></div>
         ) : (
           <div className="data-table-wrap">
             <table className="data-table">
@@ -119,25 +123,22 @@ export default function AtRisk() {
                 <tr>
                   <th onClick={() => sort('external_id')}>Customer ID <SortIcon col="external_id" /></th>
                   <th>Tier</th>
-                  <th onClick={() => sort('churn_prob_30d')}>30d Churn <SortIcon col="churn_prob_30d" /></th>
-                  <th onClick={() => sort('churn_prob_90d')}>90d Churn <SortIcon col="churn_prob_90d" /></th>
+                  <th onClick={() => sort('churn_prob_30d_pct')}>30d Churn <SortIcon col="churn_prob_30d_pct" /></th>
+                  <th onClick={() => sort('churn_prob_90d_pct')}>90d Churn <SortIcon col="churn_prob_90d_pct" /></th>
                   <th onClick={() => sort('clv_estimate')}>CLV Est. <SortIcon col="clv_estimate" /></th>
-                  <th onClick={() => sort('median_survival_days')}>Survival Days <SortIcon col="median_survival_days" /></th>
-                  <th onClick={() => sort('xgb_churn_prob')}>XGB Score <SortIcon col="xgb_churn_prob" /></th>
+                  <th onClick={() => sort('median_survival_days')}>Survival <SortIcon col="median_survival_days" /></th>
+                  <th onClick={() => sort('xgb_churn_prob_pct')}>XGB Score <SortIcon col="xgb_churn_prob_pct" /></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.slice(0, 100).map((r, i) => {
-                  const prob30 = Number(r.churn_prob_30d || 0)
-                  const prob90 = Number(r.churn_prob_90d || 0)
-                  const xgb    = Number(r.xgb_churn_prob || 0)
+                  const p30 = Number(r.churn_prob_30d_pct || 0)   // already 0-100
+                  const p90 = Number(r.churn_prob_90d_pct || 0)   // already 0-100
+                  const xgb = Number(r.xgb_churn_prob_pct || 0)   // already 0-100
+                  const pc  = probClass(p30)
                   return (
-                    <tr
-                      key={i}
-                      className={selected === i ? 'selected' : ''}
-                      onClick={() => setSelected(selected === i ? null : i)}
-                    >
-                      <td><span className="mono" style={{ fontSize: 12, color: 'var(--orange)' }}>{r.external_id || r.customer_id?.slice(0,8)}</span></td>
+                    <tr key={i} className={selected === i ? 'selected' : ''} onClick={() => setSelected(selected === i ? null : i)}>
+                      <td><span className="mono" style={{ fontSize: 12, color: 'var(--orange)' }}>{r.external_id}</span></td>
                       <td>
                         <span className="tier-badge" style={{ background: `${tierColor(r.rfm_tier)}22`, color: tierColor(r.rfm_tier) }}>
                           {r.rfm_tier || '—'}
@@ -146,28 +147,27 @@ export default function AtRisk() {
                       <td>
                         <div className="prob-bar-wrap">
                           <div className="prob-bar-track">
-                            <div className={`prob-bar-fill ${probClass(prob30)}`} style={{ width: `${prob30 * 100}%` }} />
+                            {/* width is p30 directly since it's 0-100 */}
+                            <div className={`prob-bar-fill ${pc}`} style={{ width: `${p30}%` }} />
                           </div>
-                          <span className={`prob-val text-${probClass(prob30) === 'high' ? 'red' : probClass(prob30) === 'medium' ? 'amber' : 'green'}`}>
-                            {(prob30 * 100).toFixed(1)}%
+                          <span className={`prob-val text-${pc === 'high' ? 'red' : pc === 'medium' ? 'amber' : 'green'}`}>
+                            {p30.toFixed(1)}%
                           </span>
                         </div>
                       </td>
-                      <td className="mono" style={{ fontSize: 12 }}>{(prob90 * 100).toFixed(1)}%</td>
+                      <td className="mono" style={{ fontSize: 12 }}>{p90.toFixed(1)}%</td>
                       <td className="mono" style={{ fontSize: 12 }}>
                         {r.clv_estimate != null ? `$${Number(r.clv_estimate).toFixed(0)}` : '—'}
                       </td>
                       <td className="mono" style={{ fontSize: 12 }}>
-                        {r.median_survival_days > 0 ? `${r.median_survival_days}d` : '—'}
+                        {Number(r.median_survival_days) > 0 ? `${r.median_survival_days}d` : '—'}
                       </td>
                       <td>
                         <div className="prob-bar-wrap">
                           <div className="prob-bar-track">
-                            <div className={`prob-bar-fill ${probClass(xgb)}`} style={{ width: `${xgb * 100}%` }} />
+                            <div className={`prob-bar-fill ${probClass(xgb)}`} style={{ width: `${xgb}%` }} />
                           </div>
-                          <span className="prob-val text-muted" style={{ fontSize: 11 }}>
-                            {(xgb * 100).toFixed(1)}%
-                          </span>
+                          <span className="prob-val text-muted" style={{ fontSize: 11 }}>{xgb.toFixed(1)}%</span>
                         </div>
                       </td>
                     </tr>
@@ -180,7 +180,7 @@ export default function AtRisk() {
       </div>
       {filtered.length > 100 && (
         <p className="text-muted" style={{ fontSize: 12, marginTop: 10, textAlign: 'center' }}>
-          Showing first 100 of {filtered.length} results. Refine filters to narrow down.
+          Showing first 100 of {filtered.length}. Refine filters to narrow down.
         </p>
       )}
     </>

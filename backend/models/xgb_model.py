@@ -192,27 +192,42 @@ def score_all_customers_xgb(model):
         {
             "customer_id": df["customer_id"].values,
             "xgb_churn_prob": probs,
+            "scored_at": pd.Timestamp.utcnow(),
         }
     )
 
-    # Write to temp table using engine (FIXED — was passing None before)
+    # Write to temp table
     preds.to_sql("_tmp_xgb", engine, if_exists="replace", index=False)
 
-    # Update predictions table from temp
+    # Update existing predictions AND insert new ones
     execute_sql(
         """
+        -- Update existing rows
         UPDATE predictions p
-        SET xgb_churn_prob = x.xgb_churn_prob,
-            scored_at      = NOW()
-        FROM _tmp_xgb x
-        WHERE p.customer_id = x.customer_id::uuid;
-
+        SET xgb_churn_prob = t.xgb_churn_prob,
+            scored_at = t.scored_at
+        FROM _tmp_xgb t
+        WHERE p.customer_id = t.customer_id::uuid;
+        
+        -- Insert new rows for customers not in predictions yet
+        INSERT INTO predictions (customer_id, xgb_churn_prob, scored_at)
+        SELECT t.customer_id::uuid, t.xgb_churn_prob, t.scored_at
+        FROM _tmp_xgb t
+        LEFT JOIN predictions p ON p.customer_id = t.customer_id::uuid
+        WHERE p.customer_id IS NULL;
+        
         DROP TABLE IF EXISTS _tmp_xgb;
     """
     )
 
-    logger.info(f"[XGB] Updated {len(preds)} predictions")
-    return len(preds)
+    # Count how many predictions now have xgb_churn_prob
+    count_df = query_df(
+        "SELECT COUNT(*) as count FROM predictions WHERE xgb_churn_prob IS NOT NULL"
+    )
+    count = count_df.iloc[0]["count"] if not count_df.empty else 0
+
+    logger.info(f"[XGB] Updated/Inserted predictions for {count} customers")
+    return count
 
 
 if __name__ == "__main__":

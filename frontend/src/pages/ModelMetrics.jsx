@@ -1,26 +1,37 @@
 import { useQuery } from '@tanstack/react-query'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-         ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts'
+         ResponsiveContainer, ReferenceLine } from 'recharts'
 import { fetchModelMetrics, fetchLatestMetrics, fetchIngestionLog } from '../api/client'
-import { CheckCircle, XCircle, Clock, Database, Activity } from 'lucide-react'
+import { CheckCircle, XCircle, Activity } from 'lucide-react'
+
+// API fields from api/metrics.py:
+//   model-metrics history: model_type, c_index, roc_auc, brier_score, run_date, run_id, n_customers
+//   model-metrics/latest:  same — but client.js converts array → {cox:{...}, xgboost:{...}}
+//
+// API fields from api/ingestion.py get_ingestion_log():
+//   source, run_date, rows_loaded (NOT rows_written), null_rate,
+//   status, error_msg, duration_sec (NOT duration_seconds), created_at
 
 const fmt = (n, d = 4) => n == null ? '—' : Number(n).toFixed(d)
 
 export default function ModelMetrics() {
-  const { data: history = [], isLoading: l1 } = useQuery({ queryKey: ['mhist'], queryFn: fetchModelMetrics })
+  const { data: history = [], isLoading: l1 } = useQuery({ queryKey: ['mhist'],   queryFn: fetchModelMetrics })
   const { data: latest = {},  isLoading: l2 } = useQuery({ queryKey: ['mlatest'], queryFn: fetchLatestMetrics })
-  const { data: logs = [],    isLoading: l3 } = useQuery({ queryKey: ['inglog'], queryFn: fetchIngestionLog })
+  const { data: logs = [],    isLoading: l3 } = useQuery({ queryKey: ['inglog'],  queryFn: fetchIngestionLog })
 
-  const coxHistory = history.filter(h => h.model_type === 'cox')
+  const coxHistory = history
+    .filter(h => h.model_type === 'cox')
     .map(h => ({ date: h.run_date, c_index: Number(h.c_index || 0) }))
-  const xgbHistory = history.filter(h => h.model_type === 'xgboost')
-    .map(h => ({ date: h.run_date, auc: Number(h.roc_auc || 0), brier: Number(h.brier_score || 0) }))
 
-  const cox = latest.cox || {}
-  const xgb = latest.xgboost || {}
+  const xgbHistory = history
+    .filter(h => h.model_type === 'xgboost')
+    .map(h => ({ date: h.run_date, auc: Number(h.roc_auc || 0) }))
 
-  const cIdx   = Number(cox.c_index || 0)
-  const rocAuc = Number(xgb.roc_auc || 0)
+  // client.js already converted [{model_type:'cox',...}] → {cox:{...}, xgboost:{...}}
+  const cox    = latest.cox     || {}
+  const xgb    = latest.xgboost || {}
+  const cIdx   = Number(cox.c_index    || 0)
+  const rocAuc = Number(xgb.roc_auc   || 0)
   const brier  = Number(xgb.brier_score || 0)
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -59,24 +70,19 @@ export default function ModelMetrics() {
             {l2 ? '...' : fmt(cIdx)}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6, marginBottom: 14 }}>
-            C-index (concordance) · Run {cox.run_date || '—'}
+            C-index · Run {cox.run_date || '—'} · n={cox.n_customers || '—'}
           </div>
           <div className="metric-target-bar">
             <div className={`metric-target-fill ${cIdx >= 0.70 ? 'pass' : 'fail'}`}
               style={{ width: `${Math.min(cIdx / 0.9 * 100, 100)}%` }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-            <span>0</span>
-            <span style={{ color: 'var(--text2)' }}>Target: 0.70</span>
-            <span>0.90</span>
+            <span>0</span><span style={{ color: 'var(--text2)' }}>Target: 0.70</span><span>0.90</span>
           </div>
           {cox.run_id && (
             <div style={{ marginTop: 14, padding: '8px 12px', background: 'var(--bg3)', borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-                MLflow run_id: {cox.run_id?.slice(0, 20)}...
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
-                Customers: {cox.n_customers || '—'}
+                MLflow: {cox.run_id?.slice(0, 24)}...
               </div>
             </div>
           )}
@@ -107,41 +113,35 @@ export default function ModelMetrics() {
               style={{ width: `${Math.min(rocAuc / 0.95 * 100, 100)}%` }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-            <span>0.5</span>
-            <span style={{ color: 'var(--text2)' }}>Target: 0.78</span>
-            <span>0.95</span>
+            <span>0.5</span><span style={{ color: 'var(--text2)' }}>Target: 0.78</span><span>0.95</span>
           </div>
           {xgb.run_id && (
             <div style={{ marginTop: 14, padding: '8px 12px', background: 'var(--bg3)', borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-                MLflow run_id: {xgb.run_id?.slice(0, 20)}...
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
-                Customers: {xgb.n_customers || '—'}
+                MLflow: {xgb.run_id?.slice(0, 24)}...
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* History charts */}
+      {/* History line charts */}
       <div className="chart-grid chart-grid-2">
         <div className="chart-panel">
           <div className="panel-header">
-            <div>
-              <div className="panel-title">Cox C-index Over Time</div>
-              <div className="panel-sub">Concordance index per training run</div>
-            </div>
+            <div><div className="panel-title">Cox C-index Over Time</div><div className="panel-sub">Concordance per training run</div></div>
             <span className="panel-badge badge-orange">COX PH</span>
           </div>
-          {l1 ? <div className="loading-spinner"><div className="spinner" /></div> : (
+          {l1 ? <div className="loading-spinner"><div className="spinner" /></div> : coxHistory.length === 0 ? (
+            <div className="empty-state"><p>No Cox runs yet. Run pipeline first.</p></div>
+          ) : (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={coxHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#332e27" />
                 <XAxis dataKey="date" tick={{ fill: '#6b5c4a', fontSize: 9 }} tickLine={false} />
                 <YAxis domain={[0.5, 1.0]} tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine y={0.70} stroke="#f5a623" strokeDasharray="4 4" label={{ value: '0.70 target', fill: '#f5a623', fontSize: 10 }} />
+                <ReferenceLine y={0.70} stroke="#f5a623" strokeDasharray="4 4" label={{ value: '0.70', fill: '#f5a623', fontSize: 10 }} />
                 <Line type="monotone" dataKey="c_index" name="C-index" stroke="#f07030" strokeWidth={2} dot={{ r: 4, fill: '#f07030' }} />
               </LineChart>
             </ResponsiveContainer>
@@ -150,20 +150,19 @@ export default function ModelMetrics() {
 
         <div className="chart-panel">
           <div className="panel-header">
-            <div>
-              <div className="panel-title">XGBoost ROC-AUC Over Time</div>
-              <div className="panel-sub">Per training run</div>
-            </div>
+            <div><div className="panel-title">XGBoost ROC-AUC Over Time</div><div className="panel-sub">Per training run</div></div>
             <span className="panel-badge badge-green">XGB</span>
           </div>
-          {l1 ? <div className="loading-spinner"><div className="spinner" /></div> : (
+          {l1 ? <div className="loading-spinner"><div className="spinner" /></div> : xgbHistory.length === 0 ? (
+            <div className="empty-state"><p>No XGBoost runs yet. Run pipeline first.</p></div>
+          ) : (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={xgbHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#332e27" />
                 <XAxis dataKey="date" tick={{ fill: '#6b5c4a', fontSize: 9 }} tickLine={false} />
                 <YAxis domain={[0.5, 1.0]} tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine y={0.78} stroke="#4caf7d" strokeDasharray="4 4" label={{ value: '0.78 target', fill: '#4caf7d', fontSize: 10 }} />
+                <ReferenceLine y={0.78} stroke="#4caf7d" strokeDasharray="4 4" label={{ value: '0.78', fill: '#4caf7d', fontSize: 10 }} />
                 <Line type="monotone" dataKey="auc" name="ROC-AUC" stroke="#4caf7d" strokeWidth={2} dot={{ r: 4, fill: '#4caf7d' }} />
               </LineChart>
             </ResponsiveContainer>
@@ -174,10 +173,7 @@ export default function ModelMetrics() {
       {/* Ingestion log */}
       <div className="chart-panel" style={{ marginTop: 16 }}>
         <div className="panel-header">
-          <div>
-            <div className="panel-title">Pipeline Ingestion Log</div>
-            <div className="panel-sub">Last 30 pipeline runs</div>
-          </div>
+          <div><div className="panel-title">Pipeline Ingestion Log</div><div className="panel-sub">Last 30 runs</div></div>
           <span className="panel-badge badge-blue">LOGS</span>
         </div>
         {l3 ? <div className="loading-spinner"><div className="spinner" /></div> : (
@@ -185,7 +181,7 @@ export default function ModelMetrics() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Run Date</th>
+                  <th>Timestamp</th>
                   <th>Source</th>
                   <th>Rows</th>
                   <th>Null Rate</th>
@@ -198,11 +194,16 @@ export default function ModelMetrics() {
                   <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text3)', padding: 30 }}>No logs yet. Run the pipeline first.</td></tr>
                 ) : logs.slice(0, 20).map((l, i) => (
                   <tr key={i}>
-                    <td className="mono" style={{ fontSize: 12 }}>{l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
+                    {/* created_at returned as TEXT from SQL */}
+                    <td className="mono" style={{ fontSize: 11 }}>{l.created_at || l.run_date || '—'}</td>
                     <td><span className="panel-badge badge-blue">{l.source || '—'}</span></td>
-                    <td className="mono">{l.rows_written ?? '—'}</td>
-                    <td className="mono">{l.null_rate != null ? `${(Number(l.null_rate) * 100).toFixed(1)}%` : '—'}</td>
-                    <td className="mono">{l.duration_seconds != null ? `${l.duration_seconds}s` : '—'}</td>
+                    {/* API returns rows_loaded NOT rows_written */}
+                    <td className="mono">{l.rows_loaded ?? '—'}</td>
+                    <td className="mono">
+                      {l.null_rate != null ? `${(Number(l.null_rate) * 100).toFixed(1)}%` : '—'}
+                    </td>
+                    {/* API returns duration_sec NOT duration_seconds */}
+                    <td className="mono">{l.duration_sec != null ? `${l.duration_sec}s` : '—'}</td>
                     <td>
                       <span className={`log-status ${l.status === 'success' ? 'ok' : l.status === 'running' ? 'running' : 'err'}`}>
                         {l.status || '—'}

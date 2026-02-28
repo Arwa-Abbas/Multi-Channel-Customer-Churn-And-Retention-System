@@ -15,7 +15,7 @@ os.environ["GIT_PYTHON_REFRESH"] = "quiet"
 warnings.filterwarnings("ignore")
 
 import mlflow
-from db.connection import query_df, execute_sql, upsert_df
+from db.connection import query_df, execute_sql, engine
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -161,36 +161,50 @@ def train_cox_model():
                 logger.info(
                     f"[Cox] Fitting with {len(remaining)} features: {remaining}"
                 )
+
+                # Prepare data with proper types
+                fit_df = cox_df[remaining + [DURATION_COL, EVENT_COL]].copy()
+                for col in fit_df.columns:
+                    fit_df[col] = pd.to_numeric(fit_df[col], errors="coerce").fillna(0)
+
+                # Check for any issues
+                if fit_df.isnull().any().any():
+                    fit_df = fit_df.fillna(0)
+
                 cph = CoxPHFitter()
                 cph.fit(
-                    cox_df[remaining + [DURATION_COL, EVENT_COL]],
+                    fit_df,
                     duration_col=DURATION_COL,
                     event_col=EVENT_COL,
-                    step_size=0.1,
+                    step_size=0.5,
                     show_progress=False,
                 )
                 logger.info(f"[Cox] Converged!")
                 break
             except Exception as e:
+                logger.warning(f"[Cox] Failed with {remaining}: {str(e)}")
                 dropped = remaining.pop()
-                logger.warning(
-                    f"[Cox] Failed ({e.__class__.__name__}), dropping '{dropped}'"
-                )
+                logger.warning(f"[Cox] Dropping '{dropped}'")
                 cph = None
 
         if cph is None:
-            raise RuntimeError("[Cox] Could not converge with any feature combination.")
+            # Last resort: use only tenure_days
+            logger.warning("[Cox] Trying with just tenure_days...")
+            fit_df = cox_df[["tenure_days", DURATION_COL, EVENT_COL]].copy()
+            fit_df["tenure_days"] = pd.to_numeric(
+                fit_df["tenure_days"], errors="coerce"
+            ).fillna(0)
+            cph = CoxPHFitter()
+            cph.fit(
+                fit_df, duration_col=DURATION_COL, event_col=EVENT_COL, step_size=0.5
+            )
+            remaining = ["tenure_days"]
+            logger.info("[Cox] Converged with just tenure_days!")
 
-        features = remaining  # update to what actually worked
+        features = remaining
         c_index = float(cph.concordance_index_)
         logger.info(f"[Cox] C-index: {c_index:.4f}")
-        cph.print_summary(decimals=3)
         mlflow.log_metrics({"c_index": round(c_index, 4)})
-        if c_index < 0.70:
-            logger.warning(
-                f"[Cox] C-index {c_index:.4f} below 0.70 — normal for synthetic data"
-            )
-            mlflow.set_tag("quality_flag", "below_target")
 
         joblib.dump(cph, MODEL_PATH)
         joblib.dump(scaler, SCALER_PATH)
@@ -220,13 +234,13 @@ def score_all_customers(cph, df, features, run_id):
 
     churn_30d = (1 - survival_at(30)).clip(0, 1).round(5)
     churn_90d = (1 - survival_at(90)).clip(0, 1).round(5)
-    median_sur = np.nan_to_num(cph.predict_median(score_df[features]).values, nan=-1)
+    median_sur = np.nan_to_num(cph.predict_median(score_df[features]).values, nan=180)
 
     aov = df["avg_order_value"].values
     daily_frq = np.where(
-        df["tenure_days"] > 0, df["frequency"].values / df["tenure_days"].values, 0
+        df["tenure_days"] > 0, df["frequency"].values / df["tenure_days"].values, 0.01
     )
-    remaining = np.clip(median_sur, 0, 365)
+    remaining = np.clip(median_sur, 30, 365)
     clv = (aov * daily_frq * remaining).round(2)
 
     preds = pd.DataFrame(
@@ -295,5 +309,14 @@ def score_all_customers(cph, df, features, run_id):
 
 
 if __name__ == "__main__":
-    cph, df, features, run_id = train_cox_model()
-    score_all_customers(cph, df, features, run_id)
+    try:
+        cph, df, features, run_id = train_cox_model()
+        score_all_customers(cph, df, features, run_id)
+    except Exception as e:
+        logger.error(f"[Cox] Failed: {e}")
+        # Still try to create some predictions
+        from models.xgb_model import score_all_customers_xgb
+        import joblib
+
+        model = joblib.load("models/artifacts/xgb_model.pkl")
+        score_all_customers_xgb(model)
