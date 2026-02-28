@@ -1,6 +1,6 @@
 # Multi-Channel-Customer-Churn-And-Retention-System
 
-A comprehensive customer churn prediction and retention analytics platform built with **FastAPI, React, Survival Analysis, and Machine Learning**.
+An end-to-end customer churn analytics pipeline and platform that combines RFM segmentation, Survival Analysis (Cox Proportional Hazards), XGBoost classification, and CLV prediction to identify at-risk customers and estimate revenue impact, built with **FastAPI, React, Survival Analysis, and Machine Learning**.
 
 ---
 
@@ -30,30 +30,250 @@ The system includes an interactive React dashboard for monitoring:
 
 ---
 
-## 🏗️ System Architecture
 
-├── frontend/ # React Dashboard (Vite)
+# 🏗️ Architecture
+
+```
+├── frontend/          # React Dashboard (Vite)
 ├── backend/
-│ ├── api/ # FastAPI endpoints
-│ ├── models/ # Cox PH & XGBoost models
-│ ├── pipelines/ # Data ingestion & RFM processing
-│ └── db/ # Database connections
-├── airflow/ # DAGs for orchestration
-├── mlflow/ # Model experiment tracking
+│   ├── api/           # FastAPI endpoints
+│   ├── models/        # Cox PH & XGBoost models
+│   ├── pipelines/     # Data ingestion & RFM processing
+│   └── db/            # Database connections
+├── airflow/           # DAGs for orchestration
+├── mlflow/            # Model tracking
 └── docker-compose.yml
-
+```
 
 ---
 
-## ✨ Key Features
+# ✨ Key Features
 
 - 🔮 Real-time churn prediction
 - 📊 Interactive analytics dashboard
-- 🧮 RFM customer segmentation
-- 📉 Kaplan–Meier survival curves
-- 📦 Full ML lifecycle tracking (MLflow)
-- ⚙️ Automated pipeline with Airflow
+- 🧮 Automated RFM segmentation
+- 📉 Survival probability estimation
+- 📦 MLflow experiment tracking
+- ⚙️ Airflow-based pipeline orchestration
 - 🐳 Fully Dockerized deployment
 
 ---
 
+# 🚀 Quick Start (Docker)
+
+## 🔹 Prerequisites
+
+- Docker
+- Docker Compose
+
+---
+
+## 🔹 1. Clone Repository
+
+```bash
+git clone https://github.com/yourusername/churn-intelligence.git
+cd churn-intelligence
+```
+
+---
+
+## 🔹 2. Setup Environment Variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` if needed.
+
+---
+
+## 🔹 3. Start All Services
+
+```bash
+docker-compose up -d
+```
+
+---
+
+## 🌐 Access Applications
+
+| Service | URL |
+|----------|------|
+| Dashboard | http://localhost:3000 |
+| API Docs | http://localhost:8000/docs |
+| Airflow | http://localhost:8081 |
+| MLflow | http://localhost:5000 |
+
+---
+
+# 🛠️ Local Development
+
+---
+
+## 🔹 Backend Setup
+
+```bash
+cd backend
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Mac/Linux
+source venv/bin/activate
+
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Backend runs at:
+
+```
+http://localhost:8000
+```
+
+---
+
+## 🔹 Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend runs at:
+
+```
+http://localhost:5173
+```
+
+---
+
+# 📈 Data Pipeline
+
+### Pipeline Stages
+
+1. Data Ingestion
+2. RFM Scoring
+3. Feature Engineering
+4. Cox PH Model Training
+5. XGBoost Model Training
+6. Customer Scoring
+7. Metrics Logging (MLflow)
+
+---
+
+## 🔁 Trigger Full Pipeline
+
+### Via API
+
+```bash
+curl -X POST http://localhost:8000/api/pipeline/trigger
+```
+
+### Manually Inside Docker
+
+```bash
+docker exec churn_api python -m pipelines.rfm_pipeline
+docker exec churn_api python -m models.survival_model
+docker exec churn_api python -m models.xgb_model
+```
+
+---
+
+# 📡 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/kpis` | GET | Dashboard KPIs |
+| `/api/segments` | GET | RFM segment breakdown |
+| `/api/at-risk` | GET | At-risk customers |
+| `/api/survival-summary` | GET | Survival metrics |
+| `/api/km-curves` | GET | Kaplan–Meier curve data |
+| `/api/model-metrics` | GET | Model performance history |
+| `/api/customers` | GET | Customer search |
+| `/api/pipeline/trigger` | POST | Trigger full pipeline |
+
+---
+
+# 📊 Dashboard Modules
+
+- 📌 Overview (KPIs & trends)
+- ⚠️ At-Risk Customers table
+- 🏷️ RFM Segmentation view
+- 📉 Survival Analysis charts
+- 🤖 Model Metrics tracking
+- 👤 Customer Explorer
+
+---
+
+# 🧰 Tech Stack
+
+## Backend
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Pandas / NumPy
+- Lifelines
+- XGBoost
+- MLflow
+
+## Frontend
+- React 18
+- Vite
+- TanStack Query
+- Recharts
+- Lucide Icons
+
+## Infrastructure
+- Docker & Docker Compose
+- PostgreSQL
+- Redis
+- Airflow
+- Nginx
+
+---
+
+# ⚙️ Environment Configuration
+
+Example `.env` file:
+
+```env
+POSTGRES_DB=churndb
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+
+MLFLOW_TRACKING_URI=http://mlflow:5000
+
+AIRFLOW__CORE__EXECUTOR=LocalExecutor
+```
+
+---
+
+# 📦 Deployment Notes
+
+To rebuild containers:
+
+```bash
+docker-compose down
+docker-compose up --build -d
+```
+
+To view logs:
+
+```bash
+docker-compose logs -f
+```
+
+To stop services:
+
+```bash
+docker-compose down
+```
+
+---
+
+- Built with by Arwa Abbas ❤️ 
+
+---
