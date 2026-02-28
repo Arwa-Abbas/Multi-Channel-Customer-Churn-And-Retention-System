@@ -672,6 +672,31 @@ html, body, #root {
   animation: spin 0.7s linear infinite;
 }
 
+/* Footer styles */
+.footer {
+  margin-top: 2rem;
+  padding: 1rem 2rem;
+  border-top: 1px solid #332e27;
+  text-align: center;
+  color: #a89880;
+  font-size: 0.85rem;
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.footer-separator {
+  opacity: 0.5;
+}
+
+.footer-year {
+  opacity: 0.7;
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── MONO TEXT ── */

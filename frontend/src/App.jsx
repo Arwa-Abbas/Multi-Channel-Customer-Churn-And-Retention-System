@@ -44,7 +44,7 @@ function Shell() {
 
   const { mutate: runPipeline, isPending } = useMutation({
     mutationFn: triggerPipeline,
-    onSuccess: () => alert('Pipeline triggered! Check Airflow at localhost:8080'),
+    onSuccess: () => alert('Pipeline triggered!'),
     onError:   () => alert('Failed to trigger pipeline'),
   })
 
@@ -71,9 +71,9 @@ function Shell() {
             <div className="logo-icon">
               <Activity size={16} />
             </div>
-            <h1>Churn Intel</h1>
+            <h1>Churn Intelligence</h1>
           </div>
-          <p>v2.0 · production</p>
+          <p>churn and retention pipeline</p>
         </div>
 
         <div className="sidebar-section">
@@ -121,6 +121,15 @@ function Shell() {
 
         <div className="page-content">
           {renderPage()}
+        </div>
+
+        {/* ── FOOTER ── */}
+        <div className="footer">
+          <div className="footer-content">
+            <span>Made by Arwa Abbas</span>
+            <span className="footer-separator">•</span>
+            <span className="footer-year">{new Date().getFullYear()}</span>
+          </div>
         </div>
       </div>
     </div>
