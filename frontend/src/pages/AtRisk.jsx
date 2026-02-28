@@ -1,218 +1,188 @@
-import React, { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronUp, ChevronDown, Search, Filter } from "lucide-react";
-import { fetchAtRisk } from "../api/client";
-import { TIER_COLORS } from "../App";
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Search, Filter, ChevronUp, ChevronDown, AlertTriangle } from 'lucide-react'
+import { fetchAtRisk } from '../api/client'
 
-const TIERS = ["Champions","Loyal Customers","Potential Loyalists",
-               "At Risk","Can't Lose Them","Hibernating","Lost"];
+const TIERS = ['All', 'Champions', 'Loyal Customers', 'Potential Loyalists', 'At Risk', 'Hibernating', 'Lost', "Can't Lose Them"]
 
-function SortIcon({ col, sortState }) {
-  const { key, asc } = sortState;
-  if (key !== col) return <ChevronDown size={12} style={{ opacity: 0.3 }} />;
-  return asc ? <ChevronUp size={12} style={{ color: "var(--accent2)" }} />
-             : <ChevronDown size={12} style={{ color: "var(--accent2)" }} />;
-}
-
-function ChurnBar({ value }) {
-  const pct = Math.min(value ?? 0, 100);
-  const color = pct > 70 ? "var(--red)" : pct > 40 ? "var(--orange)" : "var(--green)";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--border2)", maxWidth: 64 }}>
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
-      </div>
-      <span style={{ color, fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>{pct}%</span>
-    </div>
-  );
+const TIER_COLORS = {
+  'Champions':           '#f07030',
+  'Loyal Customers':     '#f5a623',
+  'Potential Loyalists': '#4caf7d',
+  'At Risk':             '#e05555',
+  'Hibernating':         '#5b9bd5',
+  'Lost':                '#9b7fe8',
 }
 
 export default function AtRisk() {
-  const [tier,     setTier]     = useState("");
-  const [minProb,  setMinProb]  = useState(0.40);
-  const [search,   setSearch]   = useState("");
-  const [sort,     setSort]     = useState({ key: "churn_prob_30d_pct", asc: false });
-  const [selected, setSelected] = useState(null);
+  const [search,  setSearch]  = useState('')
+  const [tier,    setTier]    = useState('')
+  const [minProb, setMinProb] = useState(40)
+  const [sortCol, setSortCol] = useState('churn_prob_30d')
+  const [sortDir, setSortDir] = useState('desc')
+  const [selected, setSelected] = useState(null)
 
-  const { data: rows, isLoading } = useQuery({
-    queryKey: ["at-risk", tier, minProb],
-    queryFn:  () => fetchAtRisk({ tier: tier || undefined, min_prob: minProb, limit: 200 }),
-  });
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ['atrisk', tier, minProb],
+    queryFn: () => fetchAtRisk({
+      tier: tier || undefined,
+      min_prob: minProb / 100,
+      limit: 200,
+    }),
+  })
 
-  const toggleSort = (key) => setSort(prev =>
-    prev.key === key ? { key, asc: !prev.asc } : { key, asc: false }
-  );
+  const sort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
 
-  const filtered = useMemo(() => {
-    let data = rows ?? [];
-    if (search) {
-      const q = search.toLowerCase();
-      data = data.filter(r => r.external_id?.toLowerCase().includes(q));
-    }
-    data = [...data].sort((a, b) => {
-      const v = (x) => x[sort.key] ?? 0;
-      return sort.asc ? v(a) - v(b) : v(b) - v(a);
-    });
-    return data;
-  }, [rows, search, sort]);
+  const filtered = rows
+    .filter(r => !search || String(r.external_id || r.customer_id || '').toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const v = (x) => Number(x[sortCol] ?? 0)
+      return sortDir === 'asc' ? v(a) - v(b) : v(b) - v(a)
+    })
 
-  const HeaderCell = ({ label, col }) => (
-    <th
-      className="text-left py-2 pr-4 text-xs uppercase tracking-wider cursor-pointer select-none"
-      style={{ color: sort.key === col ? "var(--accent2)" : "var(--muted)" }}
-      onClick={() => toggleSort(col)}
-    >
-      <div className="flex items-center gap-1">
-        {label}
-        <SortIcon col={col} sortState={sort} />
-      </div>
-    </th>
-  );
+  const SortIcon = ({ col }) => sortCol === col
+    ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+    : null
+
+  const probClass = (p) => {
+    const pct = Number(p) * 100
+    if (pct >= 70) return 'high'
+    if (pct >= 40) return 'medium'
+    return 'low'
+  }
+
+  const tierColor = (t) => TIER_COLORS[t] || '#a89880'
 
   return (
-    <div className="p-6 space-y-5 max-w-[1400px]">
-      <div>
-        <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 22 }}>
-          At-Risk Customers
-        </h1>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-          Ranked by 30-day churn probability · Powered by Cox PH + XGBoost
+    <>
+      {/* Summary */}
+      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
+        <div className="kpi-card red">
+          <div className="kpi-label"><AlertTriangle size={12} /> High Risk</div>
+          <div className="kpi-value">{rows.filter(r => Number(r.churn_prob_30d) >= 0.7).length}</div>
+          <div className="kpi-sub">&gt;70% churn prob</div>
+        </div>
+        <div className="kpi-card amber">
+          <div className="kpi-label"><Filter size={12} /> Medium Risk</div>
+          <div className="kpi-value">{rows.filter(r => Number(r.churn_prob_30d) >= 0.4 && Number(r.churn_prob_30d) < 0.7).length}</div>
+          <div className="kpi-sub">40–70% churn prob</div>
+        </div>
+        <div className="kpi-card orange">
+          <div className="kpi-label"><Search size={12} /> Showing</div>
+          <div className="kpi-value">{filtered.length}</div>
+          <div className="kpi-sub">matched customers</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-             style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-          <Search size={13} style={{ color: "var(--muted)" }} />
+      <div className="filter-bar">
+        <div style={{ position: 'relative' }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
           <input
-            type="text"
-            placeholder="Search customer ID…"
+            className="filter-input"
+            style={{ paddingLeft: 32, width: 220 }}
+            placeholder="Search customer ID..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="bg-transparent outline-none text-sm"
-            style={{ color: "var(--text)", width: 180 }}
           />
         </div>
-
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-             style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-          <Filter size={13} style={{ color: "var(--muted)" }} />
-          <select
-            value={tier}
-            onChange={e => setTier(e.target.value)}
-            className="bg-transparent outline-none text-sm cursor-pointer"
-            style={{ color: "var(--text)" }}
-          >
-            <option value="">All Tiers</option>
-            {TIERS.map(t => <option key={t} value={t}>{t}</option>)}
+        <select className="filter-select" value={tier} onChange={e => setTier(e.target.value)}>
+          {TIERS.map(t => <option key={t} value={t === 'All' ? '' : t}>{t}</option>)}
+        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="text-muted" style={{ fontSize: 12 }}>Min prob:</span>
+          <select className="filter-select" value={minProb} onChange={e => setMinProb(Number(e.target.value))}>
+            {[30,40,50,60,70].map(v => <option key={v} value={v}>{v}%</option>)}
           </select>
         </div>
-
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-             style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Min 30d prob:</span>
-          <select
-            value={minProb}
-            onChange={e => setMinProb(parseFloat(e.target.value))}
-            className="bg-transparent outline-none text-sm cursor-pointer"
-            style={{ color: "var(--text)" }}
-          >
-            {[0.3, 0.4, 0.5, 0.6, 0.7].map(v => (
-              <option key={v} value={v}>{Math.round(v * 100)}%</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="px-3 py-2 rounded-lg flex items-center"
-             style={{ background: "rgba(244,114,182,0.1)", border: "1px solid rgba(244,114,182,0.3)" }}>
-          <span style={{ fontSize: 12, color: "var(--pink)", fontFamily: "JetBrains Mono, monospace" }}>
-            {filtered.length} customers
-          </span>
-        </div>
+        <span className="text-muted" style={{ fontSize: 12, marginLeft: 'auto' }}>
+          {filtered.length} of {rows.length} customers
+        </span>
       </div>
 
       {/* Table */}
-      <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--surface2)" }}>
-                <th className="pl-4 py-2" />
-                <HeaderCell label="Customer"          col="external_id" />
-                <HeaderCell label="Tier"              col="rfm_tier" />
-                <HeaderCell label="Churn 30d"         col="churn_prob_30d_pct" />
-                <HeaderCell label="Churn 90d"         col="churn_prob_90d_pct" />
-                <HeaderCell label="XGBoost"           col="xgb_churn_prob_pct" />
-                <HeaderCell label="CLV"               col="clv_estimate" />
-                <HeaderCell label="Median Survival"   col="median_survival_days" />
-                <HeaderCell label="Total Spend"       col="total_spend" />
-                <HeaderCell label="Last Active"       col="recency_days" />
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                Array(8).fill(0).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    {Array(10).fill(0).map((__, j) => (
-                      <td key={j} className="py-3 pr-4">
-                        <div className="h-3 rounded" style={{ background: "var(--border)", width: "80%" }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-              {!isLoading && filtered.map((row, idx) => (
-                <tr
-                  key={row.external_id}
-                  style={{
-                    borderBottom: "1px solid var(--border)",
-                    background: selected === row.external_id ? "rgba(108,99,255,0.08)" : idx % 2 ? "var(--surface2)" : "transparent",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => setSelected(s => s === row.external_id ? null : row.external_id)}
-                >
-                  <td className="pl-4 py-2.5">
-                    <div className="w-1 h-6 rounded-full" style={{ background: TIER_COLORS[row.rfm_tier] ?? "#666" }} />
-                  </td>
-                  <td className="pr-4 py-2.5 mono text-xs" style={{ color: "var(--accent2)" }}>
-                    {row.external_id}
-                  </td>
-                  <td className="pr-4">
-                    <span className="badge" style={{
-                      background: `${TIER_COLORS[row.rfm_tier]}18`,
-                      color: TIER_COLORS[row.rfm_tier],
-                    }}>
-                      {row.rfm_tier}
-                    </span>
-                  </td>
-                  <td className="pr-4">
-                    <ChurnBar value={row.churn_prob_30d_pct} />
-                  </td>
-                  <td className="pr-4 mono text-xs" style={{ color: "var(--muted)" }}>
-                    {row.churn_prob_90d_pct}%
-                  </td>
-                  <td className="pr-4 mono text-xs" style={{ color: "var(--blue)" }}>
-                    {row.xgb_churn_prob_pct}%
-                  </td>
-                  <td className="pr-4 mono text-xs" style={{ color: "var(--green)" }}>
-                    ${Number(row.clv_estimate ?? 0).toLocaleString()}
-                  </td>
-                  <td className="pr-4 mono text-xs">
-                    {row.median_survival_days}d
-                  </td>
-                  <td className="pr-4 mono text-xs" style={{ color: "var(--muted)" }}>
-                    ${Number(row.total_spend ?? 0).toLocaleString()}
-                  </td>
-                  <td className="pr-4 mono text-xs" style={{ color: "var(--muted)" }}>
-                    {row.recency_days}d ago
-                  </td>
+      <div className="chart-panel" style={{ padding: 0 }}>
+        {isLoading ? (
+          <div className="loading-spinner"><div className="spinner" /> Loading customers...</div>
+        ) : filtered.length === 0 ? (
+          <div className="empty-state">
+            <AlertTriangle size={40} />
+            <p>No customers match your filters</p>
+          </div>
+        ) : (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th onClick={() => sort('external_id')}>Customer ID <SortIcon col="external_id" /></th>
+                  <th>Tier</th>
+                  <th onClick={() => sort('churn_prob_30d')}>30d Churn <SortIcon col="churn_prob_30d" /></th>
+                  <th onClick={() => sort('churn_prob_90d')}>90d Churn <SortIcon col="churn_prob_90d" /></th>
+                  <th onClick={() => sort('clv_estimate')}>CLV Est. <SortIcon col="clv_estimate" /></th>
+                  <th onClick={() => sort('median_survival_days')}>Survival Days <SortIcon col="median_survival_days" /></th>
+                  <th onClick={() => sort('xgb_churn_prob')}>XGB Score <SortIcon col="xgb_churn_prob" /></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.slice(0, 100).map((r, i) => {
+                  const prob30 = Number(r.churn_prob_30d || 0)
+                  const prob90 = Number(r.churn_prob_90d || 0)
+                  const xgb    = Number(r.xgb_churn_prob || 0)
+                  return (
+                    <tr
+                      key={i}
+                      className={selected === i ? 'selected' : ''}
+                      onClick={() => setSelected(selected === i ? null : i)}
+                    >
+                      <td><span className="mono" style={{ fontSize: 12, color: 'var(--orange)' }}>{r.external_id || r.customer_id?.slice(0,8)}</span></td>
+                      <td>
+                        <span className="tier-badge" style={{ background: `${tierColor(r.rfm_tier)}22`, color: tierColor(r.rfm_tier) }}>
+                          {r.rfm_tier || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="prob-bar-wrap">
+                          <div className="prob-bar-track">
+                            <div className={`prob-bar-fill ${probClass(prob30)}`} style={{ width: `${prob30 * 100}%` }} />
+                          </div>
+                          <span className={`prob-val text-${probClass(prob30) === 'high' ? 'red' : probClass(prob30) === 'medium' ? 'amber' : 'green'}`}>
+                            {(prob30 * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="mono" style={{ fontSize: 12 }}>{(prob90 * 100).toFixed(1)}%</td>
+                      <td className="mono" style={{ fontSize: 12 }}>
+                        {r.clv_estimate != null ? `$${Number(r.clv_estimate).toFixed(0)}` : '—'}
+                      </td>
+                      <td className="mono" style={{ fontSize: 12 }}>
+                        {r.median_survival_days > 0 ? `${r.median_survival_days}d` : '—'}
+                      </td>
+                      <td>
+                        <div className="prob-bar-wrap">
+                          <div className="prob-bar-track">
+                            <div className={`prob-bar-fill ${probClass(xgb)}`} style={{ width: `${xgb * 100}%` }} />
+                          </div>
+                          <span className="prob-val text-muted" style={{ fontSize: 11 }}>
+                            {(xgb * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-    </div>
-  );
+      {filtered.length > 100 && (
+        <p className="text-muted" style={{ fontSize: 12, marginTop: 10, textAlign: 'center' }}>
+          Showing first 100 of {filtered.length} results. Refine filters to narrow down.
+        </p>
+      )}
+    </>
+  )
 }

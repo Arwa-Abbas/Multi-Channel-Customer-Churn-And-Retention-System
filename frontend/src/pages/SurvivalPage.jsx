@@ -1,189 +1,186 @@
-import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend
-} from "recharts";
-import { fetchKMCurves, fetchSurvivalSummary } from "../api/client";
-import { TIER_COLORS } from "../App";
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+         ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts'
+import { fetchKMCurves, fetchSurvivalSummary } from '../api/client'
+import { TrendingUp, Clock, Users } from 'lucide-react'
 
-// ── Transform KM JSON → Recharts-ready array ────────────────────────────────
-function buildChartData(kmData) {
-  if (!kmData) return [];
-  const tiers = Object.keys(kmData);
-  if (tiers.length === 0) return [];
+const COLORS = ['#f07030','#f5a623','#4caf7d','#e05555','#5b9bd5','#9b7fe8','#e878a2']
 
-  // Use the first tier's timeline as base
-  const timeline = kmData[tiers[0]].timeline;
-  return timeline.map((t, i) => {
-    const point = { day: t };
-    tiers.forEach((tier) => {
-      const surv = kmData[tier].survival[i];
-      point[tier] = surv != null ? parseFloat((surv * 100).toFixed(1)) : null;
-    });
-    return point;
-  });
-}
+const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d })
 
-// ── Custom tooltip ──────────────────────────────────────────────────────────
-function KMTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="card text-xs" style={{ padding: "10px 14px", minWidth: 200 }}>
-      <div style={{ color: "var(--muted)", marginBottom: 6 }}>Day {label}</div>
-      {payload
-        .sort((a, b) => b.value - a.value)
-        .map((p) => (
-          <div key={p.dataKey} className="flex justify-between gap-4">
-            <span style={{ color: p.color }}>{p.dataKey}</span>
-            <span className="font-semibold">{p.value}%</span>
-          </div>
-        ))}
-    </div>
-  );
-}
-
-// ── Page ────────────────────────────────────────────────────────────────────
 export default function SurvivalPage() {
-  const { data: kmData,  isLoading: kmLoading }  = useQuery({ queryKey: ["km"],      queryFn: fetchKMCurves });
-  const { data: summary, isLoading: sumLoading } = useQuery({ queryKey: ["surv-sum"],queryFn: fetchSurvivalSummary });
+  const { data: kmRaw = {},    isLoading: l1 } = useQuery({ queryKey: ['km'],       queryFn: fetchKMCurves })
+  const { data: summary = [],  isLoading: l2 } = useQuery({ queryKey: ['surv-sum'], queryFn: fetchSurvivalSummary })
+  const [hidden, setHidden] = useState(new Set())
 
-  const [hiddenTiers, setHiddenTiers] = useState(new Set());
+  const tiers  = Object.keys(kmRaw)
+  const colors = Object.fromEntries(tiers.map((t, i) => [t, COLORS[i % COLORS.length]]))
 
-  const chartData   = buildChartData(kmData);
-  const activeTiers = Object.keys(kmData ?? {}).filter(t => !hiddenTiers.has(t));
+  // Build merged time-series for recharts
+  const allTimes = [...new Set(tiers.flatMap(t => kmRaw[t]?.timeline || []))].sort((a,b) => a-b)
+  const merged = allTimes.slice(0, 200).map(t => {
+    const row = { time: Math.round(t) }
+    tiers.forEach(tier => {
+      const d = kmRaw[tier]
+      if (!d) return
+      const idx = d.timeline.findIndex((v, i) => v <= t && (i === d.timeline.length - 1 || d.timeline[i+1] > t))
+      row[tier] = idx >= 0 ? Number(d.survival[idx] * 100).toFixed(1) : null
+    })
+    return row
+  })
 
-  const toggleTier = (tier) => {
-    setHiddenTiers(prev => {
-      const next = new Set(prev);
-      next.has(tier) ? next.delete(tier) : next.add(tier);
-      return next;
-    });
-  };
+  const toggleTier = (t) => setHidden(prev => {
+    const s = new Set(prev)
+    s.has(t) ? s.delete(t) : s.add(t)
+    return s
+  })
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null
+    return (
+      <div style={{ background: '#221e19', border: '1px solid #332e27', borderRadius: 8, padding: '10px 14px' }}>
+        <p style={{ color: '#a89880', fontSize: 11, marginBottom: 6 }}>Day {label}</p>
+        {payload.filter(p => p.value != null).map((p, i) => (
+          <p key={i} style={{ color: p.color, fontSize: 12, fontFamily: 'JetBrains Mono' }}>
+            {p.dataKey}: {p.value}%
+          </p>
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1200px]">
-      <div>
-        <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 22 }}>
-          Survival Analysis
-        </h1>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-          Kaplan-Meier curves · Cox Proportional Hazards · P(still active) over time
+    <>
+      {/* Summary KPI cards */}
+      {!l2 && summary.length > 0 && (
+        <div className="kpi-grid" style={{ gridTemplateColumns: `repeat(${Math.min(summary.length, 4)}, 1fr)`, marginBottom: 20 }}>
+          {summary.slice(0, 4).map((s, i) => (
+            <div key={i} className="kpi-card" style={{ borderTop: `3px solid ${COLORS[i]}` }}>
+              <div className="kpi-label"><Clock size={12} /> {s.rfm_tier}</div>
+              <div className="kpi-value" style={{ fontSize: 26, color: COLORS[i] }}>
+                {s.median_survival_days > 0 ? `${s.median_survival_days}d` : '∞'}
+              </div>
+              <div className="kpi-sub">
+                Median survival · {Number(s.avg_churn_prob_30d || 0).toFixed(1)}% churn 30d
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Survival summary table */}
-      <div className="card">
-        <div className="card-title">Survival Summary by RFM Tier</div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Tier", "Customers", "Median Survival (days)", "Avg Churn 30d %", "Avg CLV"].map(h => (
-                <th key={h} className="text-left py-2 pr-6 text-xs uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(summary ?? []).map(row => (
-              <tr key={row.rfm_tier} style={{ borderBottom: "1px solid var(--border)", opacity: hiddenTiers.has(row.rfm_tier) ? 0.4 : 1 }}>
-                <td className="py-2.5 pr-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-sm" style={{ background: TIER_COLORS[row.rfm_tier] ?? "#666" }} />
-                    <span style={{ fontFamily: "Syne, sans-serif", fontWeight: 600 }}>{row.rfm_tier}</span>
-                  </div>
-                </td>
-                <td className="pr-6 mono text-sm">{row.customer_count?.toLocaleString()}</td>
-                <td className="pr-6">
-                  <span className="mono">{row.avg_median_survival ?? "—"}</span>
-                </td>
-                <td className="pr-6">
-                  <span style={{ color: row.avg_churn_prob_30d_pct > 50 ? "var(--red)" : row.avg_churn_prob_30d_pct > 25 ? "var(--orange)" : "var(--green)" }}>
-                    {row.avg_churn_prob_30d_pct}%
-                  </span>
-                </td>
-                <td>${Number(row.avg_clv ?? 0).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* KM Chart */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div className="card-title mb-0">Kaplan-Meier Curves — P(Survival) by Tier</div>
-          <div className="text-xs" style={{ color: "var(--muted)" }}>Click legend to toggle</div>
+      {/* KM Curves */}
+      <div className="chart-panel" style={{ marginBottom: 16 }}>
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">Kaplan-Meier Survival Curves</div>
+            <div className="panel-sub">P(customer still active) over time — by RFM tier</div>
+          </div>
+          <span className="panel-badge badge-green">SURVIVAL</span>
         </div>
 
-        {/* Tier toggles */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {Object.keys(kmData ?? {}).map(tier => (
-            <button
-              key={tier}
-              onClick={() => toggleTier(tier)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all"
-              style={{
-                background:  hiddenTiers.has(tier) ? "transparent" : `${TIER_COLORS[tier] ?? "#666"}20`,
-                border:      `1px solid ${TIER_COLORS[tier] ?? "#666"}${hiddenTiers.has(tier) ? "40" : "80"}`,
-                color:       hiddenTiers.has(tier) ? "var(--dim)" : TIER_COLORS[tier],
-                fontFamily:  "JetBrains Mono, monospace",
-              }}
+        {/* Legend toggle */}
+        <div className="km-legend">
+          {tiers.map(t => (
+            <div
+              key={t}
+              className={`km-legend-item ${hidden.has(t) ? 'off' : ''}`}
+              onClick={() => toggleTier(t)}
             >
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: TIER_COLORS[tier] }} />
-              {tier}
-              {kmData?.[tier]?.median && (
-                <span style={{ opacity: 0.7 }}>· {Math.round(kmData[tier].median)}d</span>
-              )}
-            </button>
+              <div className="km-legend-dot" style={{ background: colors[t] }} />
+              {t}
+            </div>
           ))}
         </div>
 
-        {kmLoading ? (
-          <div className="h-80 rounded" style={{ background: "var(--border)" }} />
+        {l1 ? (
+          <div className="loading-spinner"><div className="spinner" /></div>
+        ) : tiers.length === 0 ? (
+          <div className="empty-state">
+            <TrendingUp size={40} />
+            <p>No survival curve data. Run the pipeline first.</p>
+          </div>
         ) : (
-          <ResponsiveContainer width="100%" height={340}>
-            <LineChart data={chartData} margin={{ right: 20 }}>
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize: 10, fill: "var(--muted)" }}
-                tickLine={false}
-                label={{ value: "Days", position: "insideBottom", offset: -4, fontSize: 11, fill: "var(--muted)" }}
-              />
-              <YAxis
-                domain={[0, 100]}
-                tick={{ fontSize: 10, fill: "var(--muted)" }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={v => `${v}%`}
-                label={{ value: "P(Survival)", angle: -90, position: "insideLeft", fontSize: 11, fill: "var(--muted)" }}
-              />
-              <Tooltip content={<KMTooltip />} />
-              <ReferenceLine y={50} stroke="var(--dim)" strokeDasharray="4 2"
-                             label={{ value: "50% (Median)", fill: "var(--dim)", fontSize: 10 }} />
-
-              {activeTiers.map(tier => (
-                <Line
-                  key={tier}
-                  type="stepAfter"
-                  dataKey={tier}
-                  stroke={TIER_COLORS[tier] ?? "#666"}
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                />
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={merged}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#332e27" />
+              <XAxis dataKey="time" tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false}
+                label={{ value: 'Days since acquisition', position: 'insideBottom', offset: -5, fill: '#6b5c4a', fontSize: 11 }} />
+              <YAxis domain={[0, 100]} unit="%" tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false} axisLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <ReferenceLine y={50} stroke="#6b5c4a" strokeDasharray="4 4" label={{ value: '50% (median)', fill: '#6b5c4a', fontSize: 10 }} />
+              {tiers.filter(t => !hidden.has(t)).map(t => (
+                <Line key={t} type="stepAfter" dataKey={t} stroke={colors[t]} strokeWidth={2}
+                  dot={false} connectNulls />
               ))}
             </LineChart>
           </ResponsiveContainer>
         )}
+      </div>
 
-        <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: "rgba(96,165,250,0.07)", border: "1px solid rgba(96,165,250,0.2)", color: "#bfdbfe" }}>
-          <strong>Reading this chart:</strong> Each line shows the probability a customer in that segment is still active (not churned) by day N.
-          Where a line crosses the dashed 50% mark is the <em>median survival time</em> — half of that segment has churned by that point.
-          Champions (top-left) survive longest; Lost segment (bottom) churns fastest.
+      {/* Median survival bar + table */}
+      <div className="chart-grid chart-grid-2">
+        <div className="chart-panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">Median Survival Days by Tier</div>
+              <div className="panel-sub">How long until 50% have churned</div>
+            </div>
+            <span className="panel-badge badge-amber">MEDIAN</span>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={summary.filter(s => s.median_survival_days > 0).map((s, i) => ({
+              tier: s.rfm_tier?.split(' ').slice(0, 2).join(' '),
+              days: Number(s.median_survival_days || 0),
+              color: COLORS[i],
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#332e27" />
+              <XAxis dataKey="tier" tick={{ fill: '#6b5c4a', fontSize: 9 }} tickLine={false} />
+              <YAxis tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false} axisLine={false} unit="d" />
+              <Tooltip contentStyle={{ background: '#221e19', border: '1px solid #332e27', borderRadius: 8 }} itemStyle={{ color: '#e8d8c4' }} />
+              <Bar dataKey="days" name="Median Survival" radius={[4,4,0,0]}>
+                {summary.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="chart-panel">
+          <div className="panel-header">
+            <div><div className="panel-title">Survival Summary Table</div></div>
+            <span className="panel-badge badge-blue">TABLE</span>
+          </div>
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th>Median Days</th>
+                  <th>Churn 30d</th>
+                  <th>Avg CLV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.map((s, i) => (
+                  <tr key={i}>
+                    <td>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+                        {s.rfm_tier}
+                      </span>
+                    </td>
+                    <td className="mono">{s.median_survival_days > 0 ? `${s.median_survival_days}d` : '∞'}</td>
+                    <td className="mono" style={{ color: Number(s.avg_churn_prob_30d) > 50 ? '#e05555' : '#4caf7d' }}>
+                      {Number(s.avg_churn_prob_30d || 0).toFixed(1)}%
+                    </td>
+                    <td className="mono">${fmt(s.avg_clv, 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    </>
+  )
 }

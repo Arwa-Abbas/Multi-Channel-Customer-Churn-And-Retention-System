@@ -1,221 +1,196 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-  LineChart, Line, ResponsiveContainer, Cell, ReferenceLine
-} from "recharts";
-import { fetchSegments, fetchModelMetrics, fetchLatestMetrics, fetchIngestionLog } from "../api/client";
-import { TIER_COLORS } from "../App";
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+         Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid,
+         PolarAngleAxis, ScatterChart, Scatter, ZAxis } from 'recharts'
+import { fetchSegments } from '../api/client'
 
-// ═══════════════════════════════════════════════════════════ SEGMENTS PAGE
+const TIER_COLORS = {
+  'Champions':           '#f07030',
+  'Loyal Customers':     '#f5a623',
+  'Potential Loyalists': '#4caf7d',
+  'At Risk':             '#e05555',
+  'Hibernating':         '#5b9bd5',
+  'Lost':                '#9b7fe8',
+  "Can't Lose Them":     '#e878a2',
+}
 
-export function Segments() {
-  const { data: segments = [] } = useQuery({ queryKey: ["segments"], queryFn: fetchSegments });
-  const [active, setActive] = React.useState(null);
-  const sel = segments.find(s => s.rfm_tier === active) ?? segments[0] ?? {};
+const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d })
+
+const CustomTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{ background: '#221e19', border: '1px solid #332e27', borderRadius: 8, padding: '10px 14px' }}>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color || '#e8d8c4', fontSize: 13 }}>{p.name}: {fmt(p.value, 1)}</p>
+      ))}
+    </div>
+  )
+}
+
+export default function Segments() {
+  const { data: segments = [], isLoading } = useQuery({ queryKey: ['segments'], queryFn: fetchSegments })
+  const [selected, setSelected] = useState(null)
+
+  if (isLoading) return <div className="loading-spinner"><div className="spinner" /> Loading segments...</div>
+
+  const active = selected != null ? segments[selected] : null
+
+  const radarData = active ? [
+    { metric: 'Recency',   value: Math.max(0, 100 - Number(active.avg_recency_days || 0) / 3) },
+    { metric: 'Frequency', value: Math.min(100, Number(active.avg_monetary || 0) / 50) },
+    { metric: 'Monetary',  value: Math.min(100, Number(active.avg_monetary || 0) / 100) },
+    { metric: 'CLV',       value: Math.min(100, Number(active.avg_clv || 0) / 100) },
+    { metric: 'Loyalty',   value: Math.max(0, 100 - Number(active.avg_churn_prob_30d_pct || active.avg_churn_prob_30d || 0)) },
+  ] : []
 
   return (
-    <div className="p-6 space-y-6 max-w-[1200px]">
-      <div>
-        <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 22 }}>
-          RFM Segments
-        </h1>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-          Recency · Frequency · Monetary — quintile-scored, 6-tier behavioural segmentation
+    <>
+      {/* Segment Cards */}
+      <div className="segment-grid">
+        {segments.map((s, i) => {
+          const color = TIER_COLORS[s.rfm_tier] || '#a89880'
+          const churnPct = Number(s.avg_churn_prob_30d_pct || s.avg_churn_prob_30d || 0)
+          return (
+            <div
+              key={i}
+              className={`segment-card ${selected === i ? 'selected' : ''}`}
+              onClick={() => setSelected(selected === i ? null : i)}
+              style={{ borderLeftColor: selected === i ? color : 'transparent' }}
+            >
+              <div className="segment-card-title">
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                {s.rfm_tier}
+              </div>
+              <div className="segment-stat">
+                <span className="segment-stat-label">Customers</span>
+                <span className="segment-stat-val">{fmt(s.customer_count)}</span>
+              </div>
+              <div className="segment-stat">
+                <span className="segment-stat-label">Avg Recency</span>
+                <span className="segment-stat-val">{fmt(s.avg_recency_days, 0)}d</span>
+              </div>
+              <div className="segment-stat">
+                <span className="segment-stat-label">Avg CLV</span>
+                <span className="segment-stat-val">${fmt(s.avg_clv, 0)}</span>
+              </div>
+              <div className="segment-stat">
+                <span className="segment-stat-label">Churn 30d</span>
+                <span className="segment-stat-val" style={{ color: churnPct > 50 ? '#e05555' : churnPct > 30 ? '#f5a623' : '#4caf7d' }}>
+                  {churnPct.toFixed(1)}%
+                </span>
+              </div>
+              {/* Mini bar */}
+              <div style={{ marginTop: 10 }}>
+                <div style={{ height: 4, background: '#1c1814', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(churnPct, 100)}%`, height: '100%', background: color, borderRadius: 2 }} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Charts */}
+      <div className="chart-grid chart-grid-2">
+        <div className="chart-panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">CLV vs Churn Risk by Segment</div>
+              <div className="panel-sub">Bubble size = customer count</div>
+            </div>
+            <span className="panel-badge badge-orange">COMPARISON</span>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" stroke="#332e27" />
+              <XAxis dataKey="churn" name="Churn %" unit="%" tick={{ fill: '#6b5c4a', fontSize: 10 }} label={{ value: 'Churn 30d %', position: 'insideBottom', offset: -5, fill: '#6b5c4a', fontSize: 11 }} />
+              <YAxis dataKey="clv" name="Avg CLV" unit="$" tick={{ fill: '#6b5c4a', fontSize: 10 }} />
+              <ZAxis dataKey="count" range={[60, 400]} />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                const d = payload[0]?.payload
+                return (
+                  <div style={{ background: '#221e19', border: '1px solid #332e27', borderRadius: 8, padding: '10px 14px' }}>
+                    <p style={{ color: '#e8d8c4', fontWeight: 600, marginBottom: 4 }}>{d?.tier}</p>
+                    <p style={{ color: '#a89880', fontSize: 12 }}>Churn: {d?.churn?.toFixed(1)}%</p>
+                    <p style={{ color: '#a89880', fontSize: 12 }}>CLV: ${d?.clv?.toFixed(0)}</p>
+                    <p style={{ color: '#a89880', fontSize: 12 }}>Count: {d?.count}</p>
+                  </div>
+                )
+              }} />
+              {segments.map((s, i) => (
+                <Scatter
+                  key={i}
+                  name={s.rfm_tier}
+                  data={[{
+                    tier: s.rfm_tier,
+                    churn: Number(s.avg_churn_prob_30d_pct || s.avg_churn_prob_30d || 0),
+                    clv: Number(s.avg_clv || 0),
+                    count: Number(s.customer_count || 0),
+                  }]}
+                  fill={TIER_COLORS[s.rfm_tier] || '#a89880'}
+                />
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="chart-panel">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">
+                {active ? `${active.rfm_tier} — Radar Profile` : 'Select a segment card to inspect'}
+              </div>
+              <div className="panel-sub">Normalised segment metrics</div>
+            </div>
+            <span className="panel-badge badge-blue">PROFILE</span>
+          </div>
+          {active ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="#332e27" />
+                <PolarAngleAxis dataKey="metric" tick={{ fill: '#a89880', fontSize: 11 }} />
+                <Radar dataKey="value" stroke={TIER_COLORS[active.rfm_tier] || '#f07030'}
+                  fill={TIER_COLORS[active.rfm_tier] || '#f07030'} fillOpacity={0.25} strokeWidth={2} />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty-state" style={{ padding: 40 }}>
+              <PieChart size={36} />
+              <p>Click a segment card above to see its profile radar</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Segment cards grid */}
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-        {segments.map(s => (
-          <div
-            key={s.rfm_tier}
-            className="card cursor-pointer transition-all"
-            style={{
-              borderColor: active === s.rfm_tier ? TIER_COLORS[s.rfm_tier] : "var(--border)",
-              background:  active === s.rfm_tier ? `${TIER_COLORS[s.rfm_tier]}0c` : "var(--surface)",
-            }}
-            onClick={() => setActive(s.rfm_tier === active ? null : s.rfm_tier)}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 13, color: TIER_COLORS[s.rfm_tier] }}>
-                {s.rfm_tier}
-              </div>
-              <span className="mono text-xs" style={{ color: "var(--muted)" }}>
-                {s.customer_count?.toLocaleString()}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              {[
-                { label: "Avg Recency", value: `${s.avg_recency_days}d` },
-                { label: "Churn 30d",   value: `${s.avg_churn_prob_30d_pct}%`, red: s.avg_churn_prob_30d_pct > 40 },
-                { label: "Avg CLV",     value: `$${Number(s.avg_clv ?? 0).toLocaleString()}` },
-              ].map(({ label, value, red }) => (
-                <div key={label}>
-                  <div className="text-xs" style={{ color: "var(--muted)" }}>{label}</div>
-                  <div className="mono text-sm font-semibold" style={{ color: red ? "var(--red)" : "var(--text)" }}>
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Bar comparison */}
+      <div className="chart-panel" style={{ marginTop: 16 }}>
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">Avg Monetary Value by Segment</div>
+            <div className="panel-sub">Total spend per customer</div>
           </div>
-        ))}
-      </div>
-
-      {/* Bar chart comparison */}
-      <div className="card">
-        <div className="card-title">Segment Comparison — Avg Churn Probability vs CLV</div>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={segments} margin={{ bottom: 20 }}>
-            <XAxis dataKey="rfm_tier" tick={{ fontSize: 10, fill: "var(--muted)" }} tickLine={false}
-                   angle={-20} textAnchor="end" />
-            <YAxis yAxisId="left"  tick={{ fontSize: 10, fill: "var(--muted)" }} tickLine={false} axisLine={false}
-                   tickFormatter={v => `${v}%`} />
-            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: "var(--muted)" }} tickLine={false}
-                   axisLine={false} tickFormatter={v => `$${v}`} />
-            <Tooltip />
-            <Bar yAxisId="left"  dataKey="avg_churn_prob_30d_pct" name="Churn 30d %" radius={[4,4,0,0]}>
-              {segments.map(s => <Cell key={s.rfm_tier} fill={TIER_COLORS[s.rfm_tier] ?? "#666"} />)}
+          <span className="panel-badge badge-amber">MONETARY</span>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={segments.map(s => ({
+            tier: s.rfm_tier?.split(' ').slice(0, 2).join(' '),
+            monetary: Number(s.avg_monetary || 0).toFixed(0),
+            clv: Number(s.avg_clv || 0).toFixed(0),
+            color: TIER_COLORS[s.rfm_tier],
+          }))}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#332e27" />
+            <XAxis dataKey="tier" tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false} />
+            <YAxis tick={{ fill: '#6b5c4a', fontSize: 10 }} tickLine={false} axisLine={false} unit="$" />
+            <Tooltip content={<CustomTooltip />} />
+            <Bar dataKey="monetary" name="Avg Monetary $" radius={[4, 4, 0, 0]}>
+              {segments.map((s, i) => <Cell key={i} fill={TIER_COLORS[s.rfm_tier] || '#f07030'} />)}
             </Bar>
+            <Bar dataKey="clv" name="Avg CLV $" radius={[4, 4, 0, 0]} fill="#5b9bd5" opacity={0.6} />
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </div>
-  );
-}
-
-export default Segments;
-
-
-// ═══════════════════════════════════════════════════════ MODEL METRICS PAGE
-
-export function ModelMetrics() {
-  const { data: history = [] } = useQuery({ queryKey: ["metrics"],       queryFn: fetchModelMetrics });
-  const { data: latest  = [] } = useQuery({ queryKey: ["latest-metrics"],queryFn: fetchLatestMetrics });
-  const { data: logs    = [] } = useQuery({ queryKey: ["ingestion-log"], queryFn: fetchIngestionLog });
-
-  const coxHistory  = history.filter(h => h.model_type === "cox");
-  const xgbHistory  = history.filter(h => h.model_type === "xgboost");
-
-  const coxLatest   = latest.find(m => m.model_type === "cox");
-  const xgbLatest   = latest.find(m => m.model_type === "xgboost");
-
-  return (
-    <div className="p-6 space-y-6 max-w-[1200px]">
-      <div>
-        <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 22 }}>
-          ML Model Performance
-        </h1>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-          MLflow tracked runs · C-index · ROC-AUC · Brier Score
-        </div>
-      </div>
-
-      {/* Current model cards */}
-      <div className="grid grid-cols-2 gap-4">
-        {[
-          { m: coxLatest,  label: "Cox Proportional Hazards", primary: "c_index",   target: 0.70, color: "var(--accent2)" },
-          { m: xgbLatest,  label: "XGBoost Classifier",       primary: "roc_auc",   target: 0.78, color: "var(--green)" },
-        ].map(({ m, label, primary, target, color }) => (
-          <div key={label} className="card">
-            <div className="card-title">{label}</div>
-            {m ? (
-              <>
-                <div className="stat-value" style={{ color }}>{m[primary]?.toFixed(3) ?? "—"}</div>
-                <div className="stat-label">{primary === "c_index" ? "C-index (target ≥ 0.70)" : "ROC-AUC (target ≥ 0.78)"}</div>
-                <div className="mt-4 space-y-2">
-                  {[
-                    { label: "Brier Score", value: m.brier_score?.toFixed(3), good: m.brier_score < 0.15 },
-                    { label: "Customers",   value: m.n_customers?.toLocaleString() },
-                    { label: "Run Date",    value: m.run_date },
-                    { label: "MLflow Run",  value: m.run_id?.slice(0, 8) + "…" },
-                  ].map(({ label: l, value, good }) => (
-                    <div key={l} className="flex justify-between text-xs">
-                      <span style={{ color: "var(--muted)" }}>{l}</span>
-                      <span className="mono" style={{ color: good === false ? "var(--red)" : "var(--text)" }}>
-                        {value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {/* Target threshold bar */}
-                <div className="mt-4">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span style={{ color: "var(--muted)" }}>vs target ({target})</span>
-                    <span style={{ color: m[primary] >= target ? "var(--green)" : "var(--red)" }}>
-                      {m[primary] >= target ? "✓ Passes" : "✗ Below target"}
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full" style={{ background: "var(--border2)" }}>
-                    <div className="h-full rounded-full" style={{
-                      width: `${Math.min((m[primary] / 1) * 100, 100)}%`,
-                      background: m[primary] >= target ? "var(--green)" : "var(--red)",
-                    }} />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ color: "var(--muted)", fontSize: 13 }}>No champion model yet. Run the pipeline.</div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* AUC trend */}
-      {xgbHistory.length > 1 && (
-        <div className="card">
-          <div className="card-title">XGBoost ROC-AUC over Time</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={xgbHistory}>
-              <XAxis dataKey="run_date" tick={{ fontSize: 10, fill: "var(--muted)" }} tickLine={false} />
-              <YAxis domain={[0.5, 1.0]} tick={{ fontSize: 10, fill: "var(--muted)" }} tickLine={false} axisLine={false} />
-              <Tooltip />
-              <ReferenceLine y={0.78} stroke="var(--orange)" strokeDasharray="4 2"
-                             label={{ value: "Target 0.78", fill: "var(--orange)", fontSize: 10 }} />
-              <Line type="monotone" dataKey="roc_auc" stroke="var(--green)" strokeWidth={2} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Ingestion log */}
-      <div className="card">
-        <div className="card-title">Pipeline Ingestion Log</div>
-        <table className="w-full text-xs">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Source", "Date", "Rows", "Null Rate", "Status", "Duration"].map(h => (
-                <th key={h} className="text-left py-2 pr-4 uppercase tracking-wider" style={{ color: "var(--muted)", fontSize: 10 }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((l, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td className="py-2 pr-4 mono">{l.source}</td>
-                <td className="pr-4 mono" style={{ color: "var(--muted)" }}>{l.run_date}</td>
-                <td className="pr-4 mono">{l.rows_loaded?.toLocaleString()}</td>
-                <td className="pr-4 mono" style={{ color: l.null_rate > 0.05 ? "var(--red)" : "var(--muted)" }}>
-                  {l.null_rate ? `${(l.null_rate * 100).toFixed(1)}%` : "—"}
-                </td>
-                <td className="pr-4">
-                  <span className="badge" style={{
-                    background: l.status === "success" ? "rgba(34,211,165,0.1)" : "rgba(248,113,113,0.1)",
-                    color:      l.status === "success" ? "var(--green)" : "var(--red)",
-                  }}>
-                    {l.status}
-                  </span>
-                </td>
-                <td className="mono" style={{ color: "var(--muted)" }}>{l.duration_sec}s</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+    </>
+  )
 }

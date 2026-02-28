@@ -1,46 +1,41 @@
-/**
- * src/api/client.js
- * ==================
- * Centralised API client. All components import from here.
- *
- * CONNECTS TO: FastAPI backend at VITE_API_URL (default: http://localhost:8000)
- *
- * In production (Docker), Nginx proxies /api/* to FastAPI so
- * VITE_API_URL is just "" (empty string = same origin).
- */
-
-import axios from "axios";
+import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "",
+  baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 30000,
-});
+})
 
-// ── KPIs ────────────────────────────────────────────────────────────────────
-export const fetchKPIs         = () => api.get("/api/kpis").then(r => r.data);
-export const fetchChurnTrend   = () => api.get("/api/churn-trend").then(r => r.data);
-export const fetchChurnCohort  = () => api.get("/api/churn-cohort").then(r => r.data);
+// Safe array extractor — root cause of n?.map is not a function
+// API sometimes returns {data:[...]}, sometimes [...], sometimes {rows:[...]}
+const toArray = (res) => {
+  const d = res.data
+  if (Array.isArray(d))       return d
+  if (Array.isArray(d?.data)) return d.data
+  if (Array.isArray(d?.rows)) return d.rows
+  if (d && typeof d === 'object') {
+    const first = Object.values(d).find(v => Array.isArray(v))
+    if (first) return first
+  }
+  return []
+}
 
-// ── Segments ────────────────────────────────────────────────────────────────
-export const fetchSegments     = () => api.get("/api/segments").then(r => r.data);
-export const fetchShap         = () => api.get("/api/shap").then(r => r.data);
+const toObject = (res) => {
+  const d = res.data
+  if (d && typeof d === 'object' && !Array.isArray(d)) return d
+  return {}
+}
 
-// ── At-risk ─────────────────────────────────────────────────────────────────
-export const fetchAtRisk = (params = {}) =>
-  api.get("/api/at-risk", { params }).then(r => r.data);
-
-// ── Survival / KM ───────────────────────────────────────────────────────────
-export const fetchKMCurves        = () => api.get("/api/km-curves").then(r => r.data);
-export const fetchSurvivalSummary = () => api.get("/api/survival-summary").then(r => r.data);
-
-// ── Customers ───────────────────────────────────────────────────────────────
-export const fetchCustomer  = (id) => api.get(`/api/customers/${id}`).then(r => r.data);
-export const searchCustomers = (params) => api.get("/api/customers", { params }).then(r => r.data);
-
-// ── Model metrics ────────────────────────────────────────────────────────────
-export const fetchModelMetrics  = () => api.get("/api/model-metrics").then(r => r.data);
-export const fetchLatestMetrics = () => api.get("/api/model-metrics/latest").then(r => r.data);
-
-// ── Ingestion ────────────────────────────────────────────────────────────────
-export const fetchIngestionLog  = () => api.get("/api/ingestion-log").then(r => r.data);
-export const triggerPipeline    = () => api.post("/api/pipeline/trigger").then(r => r.data);
+export const fetchKPIs          = () => api.get('/api/kpis').then(toObject)
+export const fetchChurnTrend    = () => api.get('/api/churn-trend').then(toArray)
+export const fetchChurnCohort   = () => api.get('/api/churn-cohort').then(toArray)
+export const fetchSegments      = () => api.get('/api/segments').then(toArray)
+export const fetchAtRisk        = (params) => api.get('/api/at-risk', { params }).then(toArray)
+export const fetchShap          = () => api.get('/api/shap').then(toArray)
+export const fetchKMCurves      = () => api.get('/api/km-curves').then(toObject)
+export const fetchSurvivalSummary = () => api.get('/api/survival-summary').then(toArray)
+export const fetchModelMetrics  = () => api.get('/api/model-metrics').then(toArray)
+export const fetchLatestMetrics = () => api.get('/api/model-metrics/latest').then(toObject)
+export const fetchIngestionLog  = () => api.get('/api/ingestion-log').then(toArray)
+export const triggerPipeline    = () => api.post('/api/pipeline/trigger').then(toObject)
+export const searchCustomers    = (params) => api.get('/api/customers', { params }).then(toArray)
+export const fetchCustomer      = (id) => api.get(`/api/customers/${id}`).then(toObject)
