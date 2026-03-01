@@ -9,7 +9,7 @@ RETURNS: Pre-computed K-M results saved after last model training run.
 import json
 import logging
 from pathlib import Path
-import math  # ← ONLY ADDITION
+import math
 
 from fastapi import APIRouter, HTTPException
 
@@ -44,14 +44,12 @@ def get_km_curves():
         with open(KM_PATH) as f:
             data = json.load(f)
 
-        # ← ONLY ADDITION: Replace Infinity with 3650
         for tier, tier_data in data.items():
             if "median" in tier_data and tier_data["median"] == float("inf"):
                 tier_data["median"] = 3650
 
         return data
 
-    # Fallback: compute simplified version from DB
     logger.warning("[API] KM artifact not found — computing from DB")
     df = query_df(
         """

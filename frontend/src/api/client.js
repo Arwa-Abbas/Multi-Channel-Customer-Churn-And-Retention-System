@@ -6,11 +6,6 @@ const api = axios.create({
   timeout: 30000,
 })
 
-// ─── Safe data extractors ───────────────────────────────────────────────────
-// Root cause of "n?.map is not a function":
-// API returns varied shapes — [{...}], {data:[...]}, {rows:[...]}, {...}
-// These helpers always return the right type.
-
 const toArray = (res) => {
   const d = res.data
   if (Array.isArray(d))            return d
@@ -23,7 +18,6 @@ const toArray = (res) => {
     const arr = Object.values(d).find(v => Array.isArray(v))
     if (arr) return arr
   }
-  // Last resort: wrap single object in array, or return empty
   if (d && typeof d === 'object') return [d]
   return []
 }

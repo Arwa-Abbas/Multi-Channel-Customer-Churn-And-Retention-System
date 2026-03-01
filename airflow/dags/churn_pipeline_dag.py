@@ -36,7 +36,7 @@ from airflow.utils.trigger_rule import TriggerRule
 # Make backend modules importable inside DAG tasks
 sys.path.insert(0, "/opt/airflow/backend")
 
-# ── Default args ────────────────────────────────────────────────────────────
+# Default args
 default_args = {
     "owner": "data-team",
     "depends_on_past": False,
@@ -46,9 +46,6 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
     "execution_timeout": timedelta(minutes=45),
 }
-
-
-# ── Task callables ──────────────────────────────────────────────────────────
 
 
 def task_ingest_tickets(**context):
@@ -181,7 +178,7 @@ def task_quality_check(**context):
     }
 
 
-# ── DAG definition ──────────────────────────────────────────────────────────
+# DAG definition
 
 with DAG(
     dag_id="churn_nightly_pipeline",
@@ -194,10 +191,10 @@ with DAG(
     tags=["churn", "production", "ml"],
 ) as dag:
 
-    # ── Pipeline start ────────────────────────────────────────
+    # Pipeline start
     start = EmptyOperator(task_id="pipeline_start")
 
-    # ── Ingestion ─────────────────────────────────────────────
+    # Ingestion
     ingest_tickets = PythonOperator(
         task_id="ingest_tickets",
         python_callable=task_ingest_tickets,
@@ -208,7 +205,7 @@ with DAG(
         """,
     )
 
-    # ── RFM ───────────────────────────────────────────────────
+    # RFM
     rfm = PythonOperator(
         task_id="rfm_pipeline",
         python_callable=task_rfm_pipeline,
@@ -219,7 +216,7 @@ with DAG(
         """,
     )
 
-    # ── Models ────────────────────────────────────────────────
+    # Models
     survival = PythonOperator(
         task_id="train_survival_model",
         python_callable=task_train_survival,
@@ -240,13 +237,13 @@ with DAG(
         """,
     )
 
-    # ── Quality check ─────────────────────────────────────────
+    # Quality check
     quality = PythonOperator(
         task_id="quality_check",
         python_callable=task_quality_check,
     )
 
-    # ── PowerBI export ────────────────────────────────────────
+    # PowerBI export
     export = PythonOperator(
         task_id="export_powerbi_snapshot",
         python_callable=task_export_powerbi_snapshot,
@@ -258,11 +255,10 @@ with DAG(
         """,
     )
 
-    # ── Done ──────────────────────────────────────────────────
     done = EmptyOperator(
         task_id="pipeline_done",
         trigger_rule=TriggerRule.ALL_SUCCESS,
     )
 
-    # ── Task dependencies ─────────────────────────────────────
+    # Task dependencies
     start >> ingest_tickets >> rfm >> survival >> xgb >> quality >> export >> done

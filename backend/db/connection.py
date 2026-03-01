@@ -53,7 +53,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-# ── FastAPI Dependency ─────────────────────────────────────────────────────
+# ── FastAPI Dependency
 def get_db():
     """
     Yield a SQLAlchemy Session for FastAPI route injection.
@@ -73,7 +73,7 @@ def get_db():
         db.close()
 
 
-# ── Pipeline helpers ───────────────────────────────────────────────────────
+# Pipeline helpers
 def query_df(sql: str, params: dict = None) -> pd.DataFrame:
     """
     Run a SQL SELECT and return a Pandas DataFrame.

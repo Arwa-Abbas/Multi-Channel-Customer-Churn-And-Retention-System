@@ -10,7 +10,7 @@
 -- 2. Home → Get Data → Database → PostgreSQL
 -- 3. Server:   localhost:5432  (or your Docker host IP)
 -- 4. Database: churndb
--- 5. Username: churnapp    Password: password123
+-- 5. Username: yourusername  Password: yourpassword
 -- 6. Data Connectivity mode: DirectQuery
 -- 7. Select these views (NOT the raw tables):
 --      vw_kpi_summary          → KPI cards

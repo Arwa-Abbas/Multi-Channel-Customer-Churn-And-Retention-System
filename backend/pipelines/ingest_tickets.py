@@ -35,7 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ── Zendesk Client ─────────────────────────────────────────────────────────
+# Zendesk Client
 
 
 class ZendeskClient:
@@ -106,7 +106,7 @@ class ZendeskClient:
         return ratings
 
 
-# ── Normalisation ──────────────────────────────────────────────────────────
+# Normalisation
 
 
 def _normalise_zendesk(raw_tickets: list[dict], customer_map: dict) -> pd.DataFrame:
@@ -118,13 +118,12 @@ def _normalise_zendesk(raw_tickets: list[dict], customer_map: dict) -> pd.DataFr
     """
     rows = []
     for t in raw_tickets:
-        # Zendesk stores the external customer ID in 'external_id' or tags
+
         ext_id = str(t.get("external_id") or t.get("requester_id", ""))
         cust_uuid = customer_map.get(ext_id)
         if not cust_uuid:
-            continue  # skip unknown customers
+            continue
 
-        # Resolution time in days
         created = t.get("created_at")
         solved = t.get("solved_at") or t.get("updated_at")
         res_days = None
@@ -203,7 +202,7 @@ def _normalise_csv(csv_path: str, customer_map: dict) -> pd.DataFrame:
     ].rename(columns={"ticket_id": "external_ticket_id"})
 
 
-# ── Main pipeline ──────────────────────────────────────────────────────────
+# ── Main pipeline
 
 
 def run_ticket_ingestion(
@@ -218,7 +217,6 @@ def run_ticket_ingestion(
 
     logger.info(f"[Tickets] Starting ingestion from source={source}")
 
-    # Load customer ID mapping (external_id → UUID)
     customers_df = query_df("SELECT external_id, customer_id::text FROM customers")
     customer_map = dict(zip(customers_df["external_id"], customers_df["customer_id"]))
     logger.info(f"[Tickets] Loaded {len(customer_map)} customer mappings")
@@ -330,7 +328,7 @@ def _log_ingestion(source, run_date, rows, null_rate, status, error, duration):
     )
 
 
-# ── CSV Sample Generator ───────────────────────────────────────────────────
+#  CSV Sample Generator
 
 
 def generate_sample_csv(

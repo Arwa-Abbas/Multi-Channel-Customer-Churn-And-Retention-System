@@ -42,7 +42,6 @@ async def trigger_pipeline(background_tasks: BackgroundTasks):
             logger.info("[Pipeline] Training Cox PH...")
             from models.survival_model import train_cox_model, score_all_customers
 
-            # Fixed: train_cox_model now returns 4 values (cph, df, features, run_id)
             result = train_cox_model()
             if len(result) == 4:
                 cph, df, features, run_id = result

@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks
 from db.connection import query_df
 import numpy as np
 
-# ── Metrics ────────────────────────────────────────────────────────────────
+
 router = APIRouter()
 
 
@@ -15,7 +15,6 @@ def get_model_metrics():
     df = query_df("SELECT * FROM vw_model_metrics_history LIMIT 50")
     df["run_date"] = df["run_date"].astype(str)
 
-    # Replace NaN/Inf with None (which becomes null in JSON)
     result = df.to_dict(orient="records")
     for row in result:
         for key, value in row.items():
@@ -39,7 +38,6 @@ def get_latest_metrics():
     )
     df["run_date"] = df["run_date"].astype(str)
 
-    # Replace NaN/Inf with None
     records = df.to_dict(orient="records")
     for row in records:
         for key, value in row.items():

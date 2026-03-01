@@ -188,7 +188,7 @@ def train_cox_model():
                 cph = None
 
         if cph is None:
-            # Last resort: use only tenure_days
+
             logger.warning("[Cox] Trying with just tenure_days...")
             fit_df = cox_df[["tenure_days", DURATION_COL, EVENT_COL]].copy()
             fit_df["tenure_days"] = pd.to_numeric(
@@ -255,10 +255,8 @@ def score_all_customers(cph, df, features, run_id):
         }
     )
 
-    # Write to temp table
     preds.to_sql("_tmp_cox", engine, if_exists="replace", index=False)
 
-    # Update existing AND insert new
     execute_sql(
         """
         -- Update existing rows
@@ -314,7 +312,7 @@ if __name__ == "__main__":
         score_all_customers(cph, df, features, run_id)
     except Exception as e:
         logger.error(f"[Cox] Failed: {e}")
-        # Still try to create some predictions
+
         from models.xgb_model import score_all_customers_xgb
         import joblib
 

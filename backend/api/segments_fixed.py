@@ -1,9 +1,3 @@
-"""
-api/segments.py
-================
-RFM segment endpoints — used by React dashboard and PowerBI DirectQuery.
-"""
-
 from fastapi import APIRouter, Query
 from db.connection import query_df
 
