@@ -27,6 +27,8 @@ The system includes an interactive React dashboard for monitoring:
 ![Python](https://img.shields.io/badge/python-3.11+-green)
 ![React](https://img.shields.io/badge/react-18.x-61dafb)
 ![Docker](https://img.shields.io/badge/docker-ready-2496ed)
+![Power BI](https://img.shields.io/badge/Power%2520BI-Integrated-F2C811)
+
 
 ---
 
@@ -56,6 +58,21 @@ The system includes an interactive React dashboard for monitoring:
 - 📦 MLflow experiment tracking
 - ⚙️ Airflow-based pipeline orchestration
 - 🐳 Fully Dockerized deployment
+- Power BI Integration – Direct connection to PostgreSQL for advanced reporting and visualization
+
+## Power BI Integration
+Connects directly to PostgreSQL with optimized views:
+
+| View Name               | Purpose                                    |
+|-------------------------|--------------------------------------------|
+| vw_kpi_summary          | Executive KPIs (total customers, churn rate, avg CLV) |
+| vw_segment_summary      | RFM segment breakdown with customer counts |
+| vw_monthly_active_trend | Time series data for trends                |
+| vw_at_risk_customers    | At-risk customer list with churn probabilities |
+| vw_model_metrics_history| Model performance over time               |
+| vw_churn_cohort         | Cohort analysis                            |
+
+**Connection Details:** Server: localhost, Port: 5432, Database: churndb, Username: postgres or churnapp, Authentication: Database. Dashboard components: Executive Dashboard, Customer Segmentation, At-Risk Analysis, Model Performance, Geographic Analysis.
 
 ---
 
@@ -103,7 +120,7 @@ docker-compose up -d
 | API Docs | http://localhost:8000/docs |
 | Airflow | http://localhost:8081 |
 | MLflow | http://localhost:5000 |
-
+| PowerBI | connect via desktop |
 ---
 
 # 🛠️ Local Development
@@ -225,6 +242,9 @@ docker exec churn_api python -m models.xgb_model
 - TanStack Query
 - Recharts
 - Lucide Icons
+
+- ## Business Intelligence
+- Power BI – Direct database connection with pre-built views
 
 ## Infrastructure
 - Docker & Docker Compose
