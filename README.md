@@ -72,7 +72,10 @@ Connects directly to PostgreSQL with optimized views:
 | vw_model_metrics_history| Model performance over time               |
 | vw_churn_cohort         | Cohort analysis                            |
 
-**Connection Details:** Server: localhost, Port: 5432, Database: churndb, Username: postgres or churnapp, Authentication: Database. Dashboard components: Executive Dashboard, Customer Segmentation, At-Risk Analysis, Model Performance, Geographic Analysis.
+**Connection Details:** 
+- Server: localhost, Port: 5432, Database: churndb
+- Username: postgres or churnapp, Authentication: Database.
+- Dashboard components: Executive Dashboard, Customer Segmentation, At-Risk Analysis, Model Performance, Geographic Analysis.
 
 ---
 
@@ -294,6 +297,6 @@ docker-compose down
 
 ---
 
-- Built with by Arwa Abbas ❤️ 
+- Built by Arwa Abbas ❤️ 
 
 ---
