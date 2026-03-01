@@ -232,7 +232,7 @@ docker exec churn_api python -m models.xgb_model
 
 ---
 
-![Dashboard Overview](images/dashboard_output1.png)
+![Dashboard Overview](images/dashboard_output1.PNG)
 ![At Risk Page](images/dashboard_output2.png)
 ![RFM Segments Page](images/dashboard_output3.png)
 ![Survival Curves Page](images/dashboard_output4.png)
